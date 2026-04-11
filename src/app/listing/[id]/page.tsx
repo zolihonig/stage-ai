@@ -6,14 +6,21 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Download,
-  RefreshCw,
   Eye,
   Loader2,
+  Wand2,
+  Send,
+  RotateCcw,
 } from "lucide-react";
 import { getListing, saveListing, getApiKey } from "@/lib/store";
 import type { Listing, StagedPhoto } from "@/lib/store";
-import { STYLES, ROOM_TYPES } from "@/lib/constants";
-import type { StyleId } from "@/lib/constants";
+import {
+  STYLES,
+  ROOM_TYPES,
+  COLOR_PREFERENCES,
+  REFINEMENT_SUGGESTIONS,
+} from "@/lib/constants";
+import type { StyleId, ColorPreferenceId } from "@/lib/constants";
 import StagingQueue, { type QueueItem } from "@/components/StagingQueue";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import ExportModal from "@/components/ExportModal";
@@ -29,21 +36,26 @@ export default function ListingDetailPage({
   const [listing, setListing] = useState<Listing | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isStaging, setIsStaging] = useState(false);
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "compare">("grid");
+
+  // Per-image refinement state
+  const [refiningId, setRefiningId] = useState<string | null>(null);
+  const [refinementInput, setRefinementInput] = useState("");
+  const [refinementLoading, setRefinementLoading] = useState(false);
 
   useEffect(() => {
     const data = getListing(id);
     setListing(data);
 
-    // Auto-start staging if styles are in URL
+    // Auto-start staging if autoStage flag is set
+    const autoStage = searchParams.get("autoStage");
     const stylesParam = searchParams.get("styles");
-    if (stylesParam && data && data.stagedPhotos.length === 0) {
+    if (autoStage === "true" && stylesParam && data && data.stagedPhotos.length === 0) {
       const styles = stylesParam.split(",") as StyleId[];
+      const colorPref = searchParams.get("color") as ColorPreferenceId | null;
       const instructions = searchParams.get("instructions") || "";
-      startStaging(data, styles, instructions);
+      startStaging(data, styles, colorPref, instructions);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -52,6 +64,7 @@ export default function ListingDetailPage({
     async (
       currentListing: Listing,
       styles: StyleId[],
+      colorPref: ColorPreferenceId | null,
       instructions: string
     ) => {
       const apiKey = getApiKey();
@@ -61,6 +74,11 @@ export default function ListingDetailPage({
       }
 
       setIsStaging(true);
+
+      // Resolve color preference name
+      const colorName = colorPref
+        ? COLOR_PREFERENCES.find((c) => c.id === colorPref)?.description || ""
+        : "";
 
       // Build queue
       const queueItems: QueueItem[] = [];
@@ -78,7 +96,7 @@ export default function ListingDetailPage({
       }
       setQueue(queueItems);
 
-      // Process sequentially with delays for rate limiting
+      // Process with rate limiting
       const updatedListing = { ...currentListing };
       const newStagedPhotos: StagedPhoto[] = [...currentListing.stagedPhotos];
 
@@ -111,13 +129,15 @@ export default function ListingDetailPage({
               mimeType: "image/jpeg",
               style: item.style,
               roomType: roomTypeName,
+              colorPreference: colorName,
               instructions,
               apiKey,
             }),
           });
 
           if (!res.ok) {
-            throw new Error(`API error: ${res.status}`);
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `API error: ${res.status}`);
           }
 
           const data = await res.json();
@@ -133,14 +153,12 @@ export default function ListingDetailPage({
           };
           newStagedPhotos.push(stagedPhoto);
 
-          // Update queue status
           setQueue((prev) =>
             prev.map((q, idx) =>
               idx === i ? { ...q, status: "complete" } : q
             )
           );
 
-          // Save after each successful generation
           updatedListing.stagedPhotos = newStagedPhotos;
           saveListing(updatedListing);
           setListing({ ...updatedListing });
@@ -153,9 +171,9 @@ export default function ListingDetailPage({
           );
         }
 
-        // Rate limit: wait between requests
+        // Rate limit delay between requests
         if (i < queueItems.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 3000));
         }
       }
 
@@ -164,9 +182,68 @@ export default function ListingDetailPage({
     []
   );
 
+  const handleRefine = async (stagedPhoto: StagedPhoto, instruction: string) => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      alert("Please add your Gemini API key in Settings first.");
+      return;
+    }
+
+    setRefinementLoading(true);
+    try {
+      const base64 = stagedPhoto.dataUrl.split(",")[1];
+      const mimeType = stagedPhoto.dataUrl.split(";")[0].split(":")[1];
+
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType,
+          instruction,
+          apiKey,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Refinement failed");
+      }
+
+      const data = await res.json();
+
+      // Replace the staged photo with the refined version
+      if (listing) {
+        const updatedListing = {
+          ...listing,
+          stagedPhotos: listing.stagedPhotos.map((sp) =>
+            sp.id === stagedPhoto.id
+              ? {
+                  ...sp,
+                  dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
+                  createdAt: new Date().toISOString(),
+                }
+              : sp
+          ),
+        };
+        saveListing(updatedListing);
+        setListing(updatedListing);
+      }
+
+      setRefiningId(null);
+      setRefinementInput("");
+    } catch (error) {
+      console.error("Refinement failed:", error);
+      alert(
+        `Refinement failed: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+    } finally {
+      setRefinementLoading(false);
+    }
+  };
+
   const handleExport = async () => {
     if (!listing) return;
-    // Download staged photos as individual files
     for (const staged of listing.stagedPhotos) {
       const link = document.createElement("a");
       link.href = staged.dataUrl;
@@ -191,14 +268,14 @@ export default function ListingDetailPage({
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-1 text-sm text-slate hover:text-navy mb-2"
           >
             <ArrowLeft size={14} />
-            Back to Dashboard
+            Dashboard
           </Link>
           <h1 className="font-serif text-2xl text-navy">{listing.name}</h1>
           {listing.address && (
@@ -238,32 +315,50 @@ export default function ListingDetailPage({
 
       {/* Compare View */}
       {viewMode === "compare" && listing.stagedPhotos.length > 0 && (
-        <div className="space-y-6 mb-8">
+        <div className="space-y-8 mb-8">
           {listing.photos.map((photo) => {
             const staged = getStyledPhotos(photo.id);
             if (staged.length === 0) return null;
             return (
-              <div key={photo.id} className="space-y-3">
+              <div key={photo.id} className="space-y-4">
                 <h3 className="font-serif text-lg text-navy">
                   {ROOM_TYPES.find((r) => r.id === photo.roomType)?.name ||
                     photo.roomType}
                 </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {staged.map((sp) => (
-                    <div key={sp.id}>
-                      <BeforeAfterSlider
-                        beforeSrc={photo.dataUrl}
-                        afterSrc={sp.dataUrl}
-                        beforeLabel="Original"
-                        afterLabel={sp.style}
-                        className="aspect-[4/3]"
+                {staged.map((sp) => (
+                  <div key={sp.id} className="space-y-2">
+                    <BeforeAfterSlider
+                      beforeSrc={photo.dataUrl}
+                      afterSrc={sp.dataUrl}
+                      beforeLabel="Original"
+                      afterLabel={sp.style}
+                      className="aspect-[4/3] max-w-3xl"
+                    />
+                    <div className="max-w-3xl">
+                      <div className="flex items-center gap-2 text-xs text-slate">
+                        <span>{sp.style}</span>
+                        <span>&middot;</span>
+                        <span>
+                          {(sp.generationTimeMs / 1000).toFixed(1)}s
+                        </span>
+                      </div>
+                      {/* Refinement controls */}
+                      <RefinementControls
+                        stagedPhoto={sp}
+                        isActive={refiningId === sp.id}
+                        onActivate={() => setRefiningId(sp.id)}
+                        onClose={() => {
+                          setRefiningId(null);
+                          setRefinementInput("");
+                        }}
+                        input={refiningId === sp.id ? refinementInput : ""}
+                        onInputChange={setRefinementInput}
+                        onRefine={(instruction) => handleRefine(sp, instruction)}
+                        loading={refinementLoading && refiningId === sp.id}
                       />
-                      <p className="text-xs text-slate mt-1.5 text-center">
-                        {sp.style} — {(sp.generationTimeMs / 1000).toFixed(1)}s
-                      </p>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             );
           })}
@@ -286,7 +381,7 @@ export default function ListingDetailPage({
                     </span>
                   )}
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Original */}
                   <div className="rounded-xl overflow-hidden border border-navy/10 shadow-sm">
                     <div className="aspect-[4/3] relative">
@@ -302,25 +397,33 @@ export default function ListingDetailPage({
                   </div>
                   {/* Staged versions */}
                   {staged.map((sp) => (
-                    <div
-                      key={sp.id}
-                      className="rounded-xl overflow-hidden border border-gold/20 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => {
-                        setSelectedPhoto(photo.id);
-                        setSelectedStyle(sp.id);
-                        setViewMode("compare");
-                      }}
-                    >
-                      <div className="aspect-[4/3] relative">
-                        <img
-                          src={sp.dataUrl}
-                          alt={sp.style}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 bg-gold/90 text-navy text-[10px] font-medium px-2 py-0.5 rounded backdrop-blur-sm">
-                          {sp.style}
+                    <div key={sp.id} className="space-y-2">
+                      <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="aspect-[4/3] relative">
+                          <img
+                            src={sp.dataUrl}
+                            alt={sp.style}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-2 left-2 bg-gold/90 text-navy text-[10px] font-medium px-2 py-0.5 rounded backdrop-blur-sm">
+                            {sp.style}
+                          </div>
                         </div>
                       </div>
+                      {/* Refinement controls */}
+                      <RefinementControls
+                        stagedPhoto={sp}
+                        isActive={refiningId === sp.id}
+                        onActivate={() => setRefiningId(sp.id)}
+                        onClose={() => {
+                          setRefiningId(null);
+                          setRefinementInput("");
+                        }}
+                        input={refiningId === sp.id ? refinementInput : ""}
+                        onInputChange={setRefinementInput}
+                        onRefine={(instruction) => handleRefine(sp, instruction)}
+                        loading={refinementLoading && refiningId === sp.id}
+                      />
                     </div>
                   ))}
                   {/* Processing placeholder */}
@@ -350,9 +453,9 @@ export default function ListingDetailPage({
       )}
 
       {/* No staged photos and not staging */}
-      {listing.stagedPhotos.length === 0 && !isStaging && (
+      {listing.stagedPhotos.length === 0 && !isStaging && queue.length === 0 && (
         <div className="text-center py-12 bg-white rounded-2xl border border-navy/10">
-          <RefreshCw size={32} className="text-navy/20 mx-auto mb-3" />
+          <RotateCcw size={32} className="text-navy/20 mx-auto mb-3" />
           <p className="text-slate text-sm">
             No staged photos yet. Go to{" "}
             <Link href="/listing/new" className="text-gold underline">
@@ -370,6 +473,91 @@ export default function ListingDetailPage({
         photoCount={listing.stagedPhotos.length}
         onExport={handleExport}
       />
+    </div>
+  );
+}
+
+// Refinement controls component
+function RefinementControls({
+  stagedPhoto,
+  isActive,
+  onActivate,
+  onClose,
+  input,
+  onInputChange,
+  onRefine,
+  loading,
+}: {
+  stagedPhoto: StagedPhoto;
+  isActive: boolean;
+  onActivate: () => void;
+  onClose: () => void;
+  input: string;
+  onInputChange: (val: string) => void;
+  onRefine: (instruction: string) => void;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-gold animate-pulse py-1">
+        <Loader2 size={12} className="animate-spin" />
+        Refining image...
+      </div>
+    );
+  }
+
+  if (!isActive) {
+    return (
+      <button
+        onClick={onActivate}
+        className="flex items-center gap-1.5 text-xs text-slate hover:text-gold transition-colors py-1"
+      >
+        <Wand2 size={12} />
+        Edit this image
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 bg-ivory-light rounded-xl p-3 border border-navy/5">
+      {/* Suggestion chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {REFINEMENT_SUGGESTIONS.slice(0, 6).map((suggestion) => (
+          <button
+            key={suggestion.label}
+            onClick={() => onRefine(suggestion.prompt)}
+            className="text-[11px] px-2.5 py-1 rounded-full border border-navy/10 bg-white text-navy hover:border-gold hover:text-gold transition-colors"
+          >
+            {suggestion.label}
+          </button>
+        ))}
+      </div>
+      {/* Custom input */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && input.trim()) onRefine(input.trim());
+          }}
+          placeholder="Describe a change..."
+          className="flex-1 text-xs px-3 py-2 rounded-lg border border-navy/10 bg-white text-navy placeholder:text-navy/30 focus:outline-none focus:ring-1 focus:ring-gold/30"
+        />
+        <button
+          onClick={() => input.trim() && onRefine(input.trim())}
+          disabled={!input.trim()}
+          className="px-3 py-2 bg-gold hover:bg-gold-dark text-white rounded-lg text-xs disabled:opacity-40 transition-colors"
+        >
+          <Send size={12} />
+        </button>
+        <button
+          onClick={onClose}
+          className="px-2 py-2 text-slate hover:text-navy text-xs"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

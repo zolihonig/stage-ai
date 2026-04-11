@@ -7,7 +7,7 @@ import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
 import { type Photo, saveListing } from "@/lib/store";
 import { getApiKey } from "@/lib/store";
-import type { StyleId } from "@/lib/constants";
+import type { StyleId, ColorPreferenceId } from "@/lib/constants";
 import { v4 as uuidv4 } from "uuid";
 
 export default function NewListingPage() {
@@ -17,6 +17,8 @@ export default function NewListingPage() {
   const [address, setAddress] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
+  const [colorPreference, setColorPreference] =
+    useState<ColorPreferenceId | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
   const apiKey = typeof window !== "undefined" ? getApiKey() : "";
 
@@ -27,8 +29,9 @@ export default function NewListingPage() {
   };
 
   const handleCreate = () => {
+    const listingId = uuidv4();
     const listing = {
-      id: uuidv4(),
+      id: listingId,
       name: name || "Untitled Listing",
       address,
       photos: photos.map((p) => ({ ...p, file: null })),
@@ -36,10 +39,14 @@ export default function NewListingPage() {
       createdAt: new Date().toISOString(),
     };
     saveListing(listing);
-    // Navigate to listing detail to start staging
-    router.push(
-      `/listing/${listing.id}?styles=${selectedStyles.join(",")}&instructions=${encodeURIComponent(customInstructions)}`
-    );
+
+    const params = new URLSearchParams();
+    params.set("styles", selectedStyles.join(","));
+    if (colorPreference) params.set("color", colorPreference);
+    if (customInstructions) params.set("instructions", customInstructions);
+    params.set("autoStage", "true");
+
+    router.push(`/listing/${listingId}?${params.toString()}`);
   };
 
   return (
@@ -49,7 +56,7 @@ export default function NewListingPage() {
         {[1, 2, 3].map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                 s === step
                   ? "bg-gold text-white"
                   : s < step
@@ -123,7 +130,8 @@ export default function NewListingPage() {
           <div>
             <h1 className="font-serif text-2xl text-navy">Upload Photos</h1>
             <p className="text-sm text-slate mt-1">
-              Add property photos. Room types will be auto-detected.
+              Add property photos. Room types will be auto-detected if you have
+              an API key set.
             </p>
           </div>
           <PhotoUploader
@@ -157,13 +165,14 @@ export default function NewListingPage() {
           <div>
             <h1 className="font-serif text-2xl text-navy">Choose Style</h1>
             <p className="text-sm text-slate mt-1">
-              Select up to 3 styles. Each photo will be staged in every selected
-              style.
+              Pick a style for your staging. You can select up to 3 to compare.
             </p>
           </div>
           <StyleSelector
             selected={selectedStyles}
             onToggle={toggleStyle}
+            colorPreference={colorPreference}
+            onColorChange={setColorPreference}
           />
           <div>
             <label className="block text-sm font-medium text-navy mb-1.5">
@@ -172,7 +181,7 @@ export default function NewListingPage() {
             <textarea
               value={customInstructions}
               onChange={(e) => setCustomInstructions(e.target.value)}
-              placeholder="e.g., Japanese wabi-sabi with low furniture and tatami-inspired textures"
+              placeholder="e.g., Keep it minimal with a focus on warm wood tones. No plants."
               rows={3}
               className="w-full px-4 py-2.5 rounded-xl border border-navy/15 bg-white text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold resize-none text-sm"
             />
@@ -188,7 +197,7 @@ export default function NewListingPage() {
             <button
               onClick={handleCreate}
               disabled={selectedStyles.length === 0}
-              className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-6 py-3 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Stage {photos.length} Photo{photos.length !== 1 ? "s" : ""}
               <ArrowRight size={16} />
@@ -196,11 +205,11 @@ export default function NewListingPage() {
           </div>
           {!apiKey && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-              <strong>Note:</strong> You need to add your Gemini API key in{" "}
+              <strong>Note:</strong> Add your Gemini API key in{" "}
               <a href="/settings" className="underline font-medium">
                 Settings
               </a>{" "}
-              before staging can begin.
+              before staging.
             </div>
           )}
         </div>

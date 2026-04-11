@@ -384,7 +384,8 @@ These are noted for architecture planning only. Do not implement in V1.
 - **Furniture Catalog Integration**: Partner with Wayfair / West Elm / RH APIs to show actual purchasable pieces
 - **Team / Brokerage Accounts**: Multi-user with shared listing library
 - **White Label**: Remove StageAI branding for enterprise brokerages
-- **MLS Direct Integration**: Push staged photos directly to BeachesMLS, Bright MLS, etc. via RESO Web API
+- **MLS Auto-Import**: Pull listing photos automatically from MLS by address or MLS ID via RESO Web API. Agent enters their MLS number, photos populate instantly — no manual upload needed
+- **MLS Direct Push**: Push staged photos back to BeachesMLS, Bright MLS, etc. via RESO Web API. Bidirectional MLS integration = zero friction
 - **Listing Description Generator**: AI-generated property descriptions from staged photos
 
 ---
