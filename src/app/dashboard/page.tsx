@@ -7,16 +7,43 @@ import { getListings, deleteListing, type Listing } from "@/lib/store";
 
 export default function DashboardPage() {
   const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadListings = async () => {
+    const data = await getListings();
+    // Sort newest first
+    data.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    setListings(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setListings(getListings());
+    loadListings();
   }, []);
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Delete this listing?")) return;
-    deleteListing(id);
-    setListings(getListings());
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this listing and all its staged photos?")) return;
+    await deleteListing(id);
+    loadListings();
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-navy/5 rounded w-48" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="aspect-[4/3] bg-navy/5 rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">

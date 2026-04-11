@@ -34,31 +34,17 @@ export default function ListingDetailPage({
   const { id } = use(params);
   const searchParams = useSearchParams();
   const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isStaging, setIsStaging] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "compare">("grid");
+  const [stagingStarted, setStagingStarted] = useState(false);
 
   // Per-image refinement state
   const [refiningId, setRefiningId] = useState<string | null>(null);
   const [refinementInput, setRefinementInput] = useState("");
   const [refinementLoading, setRefinementLoading] = useState(false);
-
-  useEffect(() => {
-    const data = getListing(id);
-    setListing(data);
-
-    // Auto-start staging if autoStage flag is set
-    const autoStage = searchParams.get("autoStage");
-    const stylesParam = searchParams.get("styles");
-    if (autoStage === "true" && stylesParam && data && data.stagedPhotos.length === 0) {
-      const styles = stylesParam.split(",") as StyleId[];
-      const colorPref = searchParams.get("color") as ColorPreferenceId | null;
-      const instructions = searchParams.get("instructions") || "";
-      startStaging(data, styles, colorPref, instructions);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
 
   const startStaging = useCallback(
     async (
@@ -75,7 +61,6 @@ export default function ListingDetailPage({
 
       setIsStaging(true);
 
-      // Resolve color preference name
       const colorName = colorPref
         ? COLOR_PREFERENCES.find((c) => c.id === colorPref)?.description || ""
         : "";
@@ -96,7 +81,6 @@ export default function ListingDetailPage({
       }
       setQueue(queueItems);
 
-      // Process with rate limiting
       const updatedListing = { ...currentListing };
       const newStagedPhotos: StagedPhoto[] = [...currentListing.stagedPhotos];
 
@@ -107,7 +91,6 @@ export default function ListingDetailPage({
         );
         if (!photo) continue;
 
-        // Update status to processing
         setQueue((prev) =>
           prev.map((q, idx) =>
             idx === i ? { ...q, status: "processing" } : q
@@ -159,8 +142,9 @@ export default function ListingDetailPage({
             )
           );
 
+          // Save after each successful generation
           updatedListing.stagedPhotos = newStagedPhotos;
-          saveListing(updatedListing);
+          await saveListing(updatedListing);
           setListing({ ...updatedListing });
         } catch (error) {
           console.error("Staging failed:", error);
@@ -171,7 +155,7 @@ export default function ListingDetailPage({
           );
         }
 
-        // Rate limit delay between requests
+        // Rate limit delay
         if (i < queueItems.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
         }
@@ -182,7 +166,38 @@ export default function ListingDetailPage({
     []
   );
 
-  const handleRefine = async (stagedPhoto: StagedPhoto, instruction: string) => {
+  useEffect(() => {
+    const loadAndStage = async () => {
+      const data = await getListing(id);
+      setListing(data);
+      setLoading(false);
+
+      // Auto-start staging if autoStage flag is set and we haven't started yet
+      if (!stagingStarted) {
+        const autoStage = searchParams.get("autoStage");
+        const stylesParam = searchParams.get("styles");
+        if (
+          autoStage === "true" &&
+          stylesParam &&
+          data &&
+          data.stagedPhotos.length === 0
+        ) {
+          setStagingStarted(true);
+          const styles = stylesParam.split(",") as StyleId[];
+          const colorPref = searchParams.get("color") as ColorPreferenceId | null;
+          const instructions = searchParams.get("instructions") || "";
+          startStaging(data, styles, colorPref, instructions);
+        }
+      }
+    };
+    loadAndStage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleRefine = async (
+    stagedPhoto: StagedPhoto,
+    instruction: string
+  ) => {
     const apiKey = getApiKey();
     if (!apiKey) {
       alert("Please add your Gemini API key in Settings first.");
@@ -212,7 +227,6 @@ export default function ListingDetailPage({
 
       const data = await res.json();
 
-      // Replace the staged photo with the refined version
       if (listing) {
         const updatedListing = {
           ...listing,
@@ -226,7 +240,7 @@ export default function ListingDetailPage({
               : sp
           ),
         };
-        saveListing(updatedListing);
+        await saveListing(updatedListing);
         setListing(updatedListing);
       }
 
@@ -250,14 +264,27 @@ export default function ListingDetailPage({
       const photo = listing.photos.find((p) => p.id === staged.photoId);
       link.download = `${listing.name}-${photo?.roomType || "room"}-${staged.style}.jpg`;
       link.click();
+      // Small delay between downloads so browser doesn't block them
+      await new Promise((r) => setTimeout(r, 200));
     }
     setShowExport(false);
   };
 
-  if (!listing) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 size={24} className="text-gold animate-spin" />
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 text-center">
+        <p className="text-slate">Listing not found.</p>
+        <Link href="/dashboard" className="text-gold underline text-sm mt-2 inline-block">
+          Back to Dashboard
+        </Link>
       </div>
     );
   }
@@ -281,6 +308,11 @@ export default function ListingDetailPage({
           {listing.address && (
             <p className="text-sm text-slate">{listing.address}</p>
           )}
+          <p className="text-xs text-slate mt-1">
+            {listing.photos.length} photo{listing.photos.length !== 1 ? "s" : ""}
+            {listing.stagedPhotos.length > 0 &&
+              ` · ${listing.stagedPhotos.length} staged`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {listing.stagedPhotos.length > 0 && (
@@ -342,7 +374,6 @@ export default function ListingDetailPage({
                           {(sp.generationTimeMs / 1000).toFixed(1)}s
                         </span>
                       </div>
-                      {/* Refinement controls */}
                       <RefinementControls
                         stagedPhoto={sp}
                         isActive={refiningId === sp.id}
@@ -353,7 +384,9 @@ export default function ListingDetailPage({
                         }}
                         input={refiningId === sp.id ? refinementInput : ""}
                         onInputChange={setRefinementInput}
-                        onRefine={(instruction) => handleRefine(sp, instruction)}
+                        onRefine={(instruction) =>
+                          handleRefine(sp, instruction)
+                        }
                         loading={refinementLoading && refiningId === sp.id}
                       />
                     </div>
@@ -410,7 +443,6 @@ export default function ListingDetailPage({
                           </div>
                         </div>
                       </div>
-                      {/* Refinement controls */}
                       <RefinementControls
                         stagedPhoto={sp}
                         isActive={refiningId === sp.id}
@@ -421,7 +453,9 @@ export default function ListingDetailPage({
                         }}
                         input={refiningId === sp.id ? refinementInput : ""}
                         onInputChange={setRefinementInput}
-                        onRefine={(instruction) => handleRefine(sp, instruction)}
+                        onRefine={(instruction) =>
+                          handleRefine(sp, instruction)
+                        }
                         loading={refinementLoading && refiningId === sp.id}
                       />
                     </div>
@@ -452,21 +486,22 @@ export default function ListingDetailPage({
         </div>
       )}
 
-      {/* No staged photos and not staging */}
-      {listing.stagedPhotos.length === 0 && !isStaging && queue.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-2xl border border-navy/10">
-          <RotateCcw size={32} className="text-navy/20 mx-auto mb-3" />
-          <p className="text-slate text-sm">
-            No staged photos yet. Go to{" "}
-            <Link href="/listing/new" className="text-gold underline">
-              New Listing
-            </Link>{" "}
-            to start staging.
-          </p>
-        </div>
-      )}
+      {/* Empty state */}
+      {listing.stagedPhotos.length === 0 &&
+        !isStaging &&
+        queue.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-2xl border border-navy/10">
+            <RotateCcw size={32} className="text-navy/20 mx-auto mb-3" />
+            <p className="text-slate text-sm">
+              No staged photos yet. Go to{" "}
+              <Link href="/listing/new" className="text-gold underline">
+                New Listing
+              </Link>{" "}
+              to start staging.
+            </p>
+          </div>
+        )}
 
-      {/* Export Modal */}
       <ExportModal
         isOpen={showExport}
         onClose={() => setShowExport(false)}
@@ -477,7 +512,6 @@ export default function ListingDetailPage({
   );
 }
 
-// Refinement controls component
 function RefinementControls({
   stagedPhoto,
   isActive,
@@ -520,7 +554,6 @@ function RefinementControls({
 
   return (
     <div className="space-y-2 bg-ivory-light rounded-xl p-3 border border-navy/5">
-      {/* Suggestion chips */}
       <div className="flex flex-wrap gap-1.5">
         {REFINEMENT_SUGGESTIONS.slice(0, 6).map((suggestion) => (
           <button
@@ -532,7 +565,6 @@ function RefinementControls({
           </button>
         ))}
       </div>
-      {/* Custom input */}
       <div className="flex gap-2">
         <input
           type="text"

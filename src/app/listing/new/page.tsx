@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
 import { type Photo, saveListing } from "@/lib/store";
@@ -20,6 +20,7 @@ export default function NewListingPage() {
   const [colorPreference, setColorPreference] =
     useState<ColorPreferenceId | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
+  const [saving, setSaving] = useState(false);
   const apiKey = typeof window !== "undefined" ? getApiKey() : "";
 
   const toggleStyle = (id: StyleId) => {
@@ -28,25 +29,32 @@ export default function NewListingPage() {
     );
   };
 
-  const handleCreate = () => {
-    const listingId = uuidv4();
-    const listing = {
-      id: listingId,
-      name: name || "Untitled Listing",
-      address,
-      photos: photos.map((p) => ({ ...p, file: null })),
-      stagedPhotos: [],
-      createdAt: new Date().toISOString(),
-    };
-    saveListing(listing);
+  const handleCreate = async () => {
+    setSaving(true);
+    try {
+      const listingId = uuidv4();
+      const listing = {
+        id: listingId,
+        name: name || "Untitled Listing",
+        address,
+        photos: photos.map((p) => ({ ...p, file: null })),
+        stagedPhotos: [],
+        createdAt: new Date().toISOString(),
+      };
+      await saveListing(listing);
 
-    const params = new URLSearchParams();
-    params.set("styles", selectedStyles.join(","));
-    if (colorPreference) params.set("color", colorPreference);
-    if (customInstructions) params.set("instructions", customInstructions);
-    params.set("autoStage", "true");
+      const params = new URLSearchParams();
+      params.set("styles", selectedStyles.join(","));
+      if (colorPreference) params.set("color", colorPreference);
+      if (customInstructions) params.set("instructions", customInstructions);
+      params.set("autoStage", "true");
 
-    router.push(`/listing/${listingId}?${params.toString()}`);
+      router.push(`/listing/${listingId}?${params.toString()}`);
+    } catch (error) {
+      console.error("Failed to save listing:", error);
+      alert("Failed to save listing. Please try again.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -130,8 +138,7 @@ export default function NewListingPage() {
           <div>
             <h1 className="font-serif text-2xl text-navy">Upload Photos</h1>
             <p className="text-sm text-slate mt-1">
-              Add property photos. Room types will be auto-detected if you have
-              an API key set.
+              Add property photos. Room types are auto-detected.
             </p>
           </div>
           <PhotoUploader
@@ -165,7 +172,7 @@ export default function NewListingPage() {
           <div>
             <h1 className="font-serif text-2xl text-navy">Choose Style</h1>
             <p className="text-sm text-slate mt-1">
-              Pick a style for your staging. You can select up to 3 to compare.
+              Pick a style for your staging. Select up to 3 to compare.
             </p>
           </div>
           <StyleSelector
@@ -196,11 +203,20 @@ export default function NewListingPage() {
             </button>
             <button
               onClick={handleCreate}
-              disabled={selectedStyles.length === 0}
+              disabled={selectedStyles.length === 0 || saving}
               className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-6 py-3 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Stage {photos.length} Photo{photos.length !== 1 ? "s" : ""}
-              <ArrowRight size={16} />
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Stage {photos.length} Photo{photos.length !== 1 ? "s" : ""}
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
           </div>
           {!apiKey && (
