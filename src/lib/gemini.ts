@@ -7,32 +7,40 @@ export function buildStagingPrompt(
   style: string,
   roomType: string,
   colorPreference?: string,
-  instructions?: string
+  instructions?: string,
+  isFirstInBatch?: boolean,
+  styleReference?: string
 ): string {
   const colorLine = colorPreference
-    ? `\nCOLOR PALETTE PREFERENCE: Use a ${colorPreference} color palette for all added furniture and decor. Fabrics, upholstery, and textiles should lean toward ${colorPreference} tones.`
+    ? `Use a ${colorPreference} color palette for all furniture, upholstery, textiles, and decor.`
     : "";
 
-  return `You are a world-class interior designer virtually staging this real estate listing photo. Your single task is to add ${style} furniture and decor into this ${roomType}.
+  const consistencyLine =
+    !isFirstInBatch && styleReference
+      ? `Use the exact same furniture family, color palette, wood tones, fabric textures, and lighting temperature as the other rooms in this listing. Style reference: ${styleReference}.`
+      : "";
 
-PRESERVATION — THESE ARE ABSOLUTE AND NON-NEGOTIABLE:
-Preserve every single pixel of the existing walls, floors, ceilings, windows, doors, light fixtures, outlets, vents, molding, trim, baseboards, and all architectural elements exactly as they appear. Preserve the exact camera angle, lens perspective, and field of view. Preserve the existing lighting direction, color temperature, shadow angles, and ambient light levels. Preserve all existing wall colors, paint finishes, flooring materials, countertops, backsplashes, cabinetry, and any window treatments already present. Do not move, resize, recolor, blur, sharpen, or modify any part of the existing room structure.
+  return `Using the provided image of a ${roomType}, virtually stage this room with ${style} furniture and decor.
 
-WHAT TO ADD:
-Place tasteful, proportionally correct ${style} furniture appropriate for a ${roomType}. Include complementary decor: area rugs, wall art, throw pillows, plants, books, and soft goods. Position all furniture respecting doorways, windows, traffic flow, and room geometry. Every piece must be at the correct scale relative to the room dimensions shown in the photo.${colorLine}
+Add tasteful, proportionally correct furniture appropriate for a ${roomType}: sofas, chairs, tables, rugs, wall art, throw pillows, plants, lamps, books, and soft goods placed naturally throughout the space. ${colorLine}
 
-PHOTOREALISM REQUIREMENTS:
-All added furniture must appear to physically rest on the existing floor surfaces with proper contact shadows. Shadows and reflections from every added item must perfectly match the existing lighting direction and intensity in the photo. Materials must show realistic texture, fabric weave, wood grain, and surface reflections. The final image must be completely indistinguishable from a real photograph taken by a professional real estate photographer.
-${instructions ? `\nADDITIONAL INSTRUCTIONS: ${instructions}` : ""}
+Keep the original layout, walls, windows, doors, flooring, ceilings, countertops, cabinetry, light fixtures, outlets, vents, molding, trim, baseboards, and every architectural detail EXACTLY the same. Preserve the exact camera angle, lens perspective, field of view, lighting direction, color temperature, shadow angles, and ambient light levels from the original photo.
+
+Match the existing lighting and physics perfectly. All added furniture must physically rest on the existing floor surfaces with accurate contact shadows. Shadows and reflections from every added item must match the existing lighting direction and intensity. Materials must show realistic texture — fabric weave, wood grain, leather patina, and surface reflections.
+
+Professional real estate listing photography style, shot on a medium-format camera with natural grain, subtle depth of field, accurate fabric folds, and realistic material reflections. Hyper-realistic, market-ready, warm and inviting. The result must be completely indistinguishable from a real photograph.
+
+${consistencyLine}
+${instructions ? `Additional instructions: ${instructions}` : ""}
 Generate the staged version of this room now.`;
 }
 
 export function buildRefinementPrompt(instruction: string): string {
-  return `Make the following change to this staged room photo:
+  return `Using the provided image, make the following change to this staged room:
 
 ${instruction}
 
-CRITICAL: Preserve all walls, floors, windows, ceilings, doors, and architectural elements exactly as they are. Only modify the furniture and decor as instructed. Maintain photorealistic quality. Generate the updated image now.`;
+Keep the original layout, walls, windows, flooring, and every architectural detail EXACTLY the same. Only modify the furniture and decor as instructed. Preserve the camera angle, lighting, and physics. Professional real estate listing photography quality. Generate the updated image now.`;
 }
 
 export function buildRoomDetectionPrompt(): string {
@@ -63,12 +71,21 @@ export async function stageImage(
   roomType: string,
   colorPreference?: string,
   instructions?: string,
-  premium: boolean = false
+  premium: boolean = false,
+  isFirstInBatch?: boolean,
+  styleReference?: string
 ): Promise<{ imageBase64: string; mimeType: string }> {
   const client = new GoogleGenAI({ apiKey });
   const model = premium ? PREMIUM_MODEL : STANDARD_MODEL;
 
-  const prompt = buildStagingPrompt(style, roomType, colorPreference, instructions);
+  const prompt = buildStagingPrompt(
+    style,
+    roomType,
+    colorPreference,
+    instructions,
+    isFirstInBatch,
+    styleReference
+  );
 
   const response = await client.models.generateContent({
     model,
