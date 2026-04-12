@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     // Minimal API call to verify the key works
     const response = await client.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: "Say OK" }] }],
     });
 

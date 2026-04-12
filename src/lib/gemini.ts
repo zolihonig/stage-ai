@@ -1,7 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 
-const STANDARD_MODEL = "gemini-2.0-flash-exp";
-const PREMIUM_MODEL = "gemini-2.0-flash-exp";
+// Image generation models (must support responseModalities: IMAGE)
+const IMAGE_MODEL = "gemini-2.5-flash-image";
+const PREMIUM_IMAGE_MODEL = "gemini-3-pro-image-preview";
+// Text-only model (room detection, key testing)
+const TEXT_MODEL = "gemini-2.5-flash";
 
 export function buildStagingPrompt(
   style: string,
@@ -76,7 +79,7 @@ export async function stageImage(
   styleReference?: string
 ): Promise<{ imageBase64: string; mimeType: string }> {
   const client = new GoogleGenAI({ apiKey });
-  const model = premium ? PREMIUM_MODEL : STANDARD_MODEL;
+  const model = premium ? PREMIUM_IMAGE_MODEL : IMAGE_MODEL;
 
   const prompt = buildStagingPrompt(
     style,
@@ -138,7 +141,7 @@ export async function refineImage(
   const client = new GoogleGenAI({ apiKey });
 
   const response = await client.models.generateContent({
-    model: STANDARD_MODEL,
+    model: IMAGE_MODEL,
     contents: [
       {
         role: "user",
@@ -185,7 +188,7 @@ export async function detectRoomType(
   const client = new GoogleGenAI({ apiKey });
 
   const response = await client.models.generateContent({
-    model: STANDARD_MODEL,
+    model: TEXT_MODEL,
     contents: [
       {
         role: "user",
