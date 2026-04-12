@@ -59,12 +59,11 @@ export default function PhotoUploader({
       // Add all photos to state at once
       onPhotosChange((prev) => [...prev, ...newPhotos]);
 
-      // Auto-detect room types sequentially
-      if (apiKey) {
+      // Auto-detect room types using server-side Claude (no API key needed)
+      {
         for (const photo of newPhotos) {
           setDetecting((prev) => new Set(prev).add(photo.id));
           try {
-            // Extract actual MIME type from data URL
             const mimeType =
               photo.dataUrl.split(";")[0].split(":")[1] || "image/jpeg";
             const base64 = photo.dataUrl.split(",")[1];
@@ -75,7 +74,6 @@ export default function PhotoUploader({
               body: JSON.stringify({
                 imageBase64: base64,
                 mimeType,
-                apiKey,
               }),
             });
 

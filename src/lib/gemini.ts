@@ -1,71 +1,131 @@
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 
-// Image generation models (must support responseModalities: IMAGE)
+// Image generation model
 const IMAGE_MODEL = "gemini-2.5-flash-image";
-const PREMIUM_IMAGE_MODEL = "gemini-3-pro-image-preview";
-// Text-only model (room detection, key testing)
-const TEXT_MODEL = "gemini-2.5-flash";
 
-export function buildStagingPrompt(
+// Claude model for image analysis + prompt crafting
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+
+function getAnthropicClient(): Anthropic {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+  return new Anthropic({ apiKey: key });
+}
+
+// ---------------------------------------------------------------------------
+// Claude-powered room detection — much more accurate than Gemini text models
+// ---------------------------------------------------------------------------
+export async function detectRoomType(
+  _apiKey: string, // kept for interface compat, uses server-side Claude
+  imageBase64: string,
+  mimeType: string
+): Promise<string> {
+  const claude = getAnthropicClient();
+
+  const mediaType = mimeType === "image/png" ? "image/png"
+    : mimeType === "image/webp" ? "image/webp"
+    : mimeType === "image/gif" ? "image/gif"
+    : "image/jpeg";
+
+  const response = await claude.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 50,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: `What type of room is this? Respond with ONLY one of these exact values (nothing else): living_room, bedroom, kitchen, bathroom, dining_room, office, closet, outdoor, laundry, entryway, garage`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = (response.content[0] as { type: string; text: string }).text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z_]/g, "");
+
+  const valid = [
+    "living_room", "bedroom", "kitchen", "bathroom", "dining_room",
+    "office", "closet", "outdoor", "laundry", "entryway", "garage",
+  ];
+  return valid.includes(text) ? text : "living_room";
+}
+
+// ---------------------------------------------------------------------------
+// Claude analyzes the photo and crafts an optimized Gemini prompt
+// ---------------------------------------------------------------------------
+async function craftStagingPrompt(
+  imageBase64: string,
+  mimeType: string,
   style: string,
   roomType: string,
   colorPreference?: string,
-  instructions?: string,
-  isFirstInBatch?: boolean,
-  styleReference?: string
-): string {
-  const colorLine = colorPreference
-    ? `Use a ${colorPreference} color palette for all furniture, upholstery, textiles, and decor.`
-    : "";
+  instructions?: string
+): Promise<string> {
+  const claude = getAnthropicClient();
 
-  const consistencyLine =
-    !isFirstInBatch && styleReference
-      ? `Use the exact same furniture family, color palette, wood tones, fabric textures, and lighting temperature as the other rooms in this listing. Style reference: ${styleReference}.`
-      : "";
+  const mediaType = mimeType === "image/png" ? "image/png"
+    : mimeType === "image/webp" ? "image/webp"
+    : mimeType === "image/gif" ? "image/gif"
+    : "image/jpeg";
 
-  return `Using the provided image of a ${roomType}, virtually stage this room with ${style} furniture and decor.
+  const response = await claude.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 1000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: `You are the world's best prompt engineer for Google Gemini image editing (Nano Banana). Analyze this real estate photo and write a single, optimized prompt to virtually stage it.
 
-Add tasteful, proportionally correct furniture appropriate for a ${roomType}: sofas, chairs, tables, rugs, wall art, throw pillows, plants, lamps, books, and soft goods placed naturally throughout the space. ${colorLine}
+ROOM TYPE: ${roomType}
+DESIRED STYLE: ${style}
+${colorPreference ? `COLOR PALETTE: ${colorPreference}` : ""}
+${instructions ? `ADDITIONAL INSTRUCTIONS: ${instructions}` : ""}
 
-Keep the original layout, walls, windows, doors, flooring, ceilings, countertops, cabinetry, light fixtures, outlets, vents, molding, trim, baseboards, and every architectural detail EXACTLY the same. Preserve the exact camera angle, lens perspective, field of view, lighting direction, color temperature, shadow angles, and ambient light levels from the original photo.
+Analyze:
+1. The exact lighting — direction, color temperature, intensity, shadow angles
+2. The floor material and color
+3. The wall color and finish
+4. Window placement and natural light sources
+5. The room dimensions and proportions (estimate)
+6. Any existing fixtures that must remain
 
-Match the existing lighting and physics perfectly. All added furniture must physically rest on the existing floor surfaces with accurate contact shadows. Shadows and reflections from every added item must match the existing lighting direction and intensity. Materials must show realistic texture — fabric weave, wood grain, leather patina, and surface reflections.
+Then write a prompt that:
+- Starts with "Using the provided image of this ${roomType}..."
+- Specifies EXACT furniture pieces with materials, colors, and placement positions relative to room features (e.g., "place a cream linen sofa facing the window on the left wall")
+- Describes shadows and reflections that match the EXISTING lighting you observed
+- Uses camera/lens language: "professional real estate photography, medium-format camera, natural grain"
+- Forces preservation of all architectural elements
 
-Professional real estate listing photography style, shot on a medium-format camera with natural grain, subtle depth of field, accurate fabric folds, and realistic material reflections. Hyper-realistic, market-ready, warm and inviting. The result must be completely indistinguishable from a real photograph.
+Output ONLY the prompt text. No explanation, no JSON wrapper. Just the prompt.`,
+          },
+        ],
+      },
+    ],
+  });
 
-${consistencyLine}
-${instructions ? `Additional instructions: ${instructions}` : ""}
-Generate the staged version of this room now.`;
+  return (response.content[0] as { type: string; text: string }).text.trim();
 }
 
-export function buildRefinementPrompt(instruction: string): string {
-  return `Using the provided image, make the following change to this staged room:
-
-${instruction}
-
-Keep the original layout, walls, windows, flooring, and every architectural detail EXACTLY the same. Only modify the furniture and decor as instructed. Preserve the camera angle, lighting, and physics. Professional real estate listing photography quality. Generate the updated image now.`;
-}
-
-export function buildRoomDetectionPrompt(): string {
-  return `You are analyzing a real estate listing photo to determine the room type.
-
-Look at the architectural features, fixtures, and spatial layout:
-- Kitchen: cabinets, countertops, sink, stove/oven, refrigerator
-- Bathroom: toilet, bathtub/shower, bathroom vanity, tile
-- Bedroom: bed or space clearly meant for a bed, closet doors, nightstand area
-- Living Room: open living space, fireplace, large windows, entertainment wall
-- Dining Room: dining table area, chandelier, connected to kitchen
-- Office: desk area, bookshelves, smaller enclosed room
-- Closet: built-in shelving, hanging rods, narrow enclosed space
-- Outdoor/Patio: exterior space, deck, patio, balcony, yard
-- Laundry: washer/dryer, utility sink, laundry fixtures
-- Entryway/Foyer: front door area, coat closet, entry hall
-- Garage: garage door, concrete floor, utility space
-
-Respond with ONLY one of these exact values (nothing else):
-living_room, bedroom, kitchen, bathroom, dining_room, office, closet, outdoor, laundry, entryway, garage`;
-}
-
+// ---------------------------------------------------------------------------
+// Stage image: Claude crafts the prompt → Gemini generates the image
+// ---------------------------------------------------------------------------
 export async function stageImage(
   apiKey: string,
   imageBase64: string,
@@ -74,24 +134,23 @@ export async function stageImage(
   roomType: string,
   colorPreference?: string,
   instructions?: string,
-  premium: boolean = false,
-  isFirstInBatch?: boolean,
-  styleReference?: string
+  _premium: boolean = false
 ): Promise<{ imageBase64: string; mimeType: string }> {
-  const client = new GoogleGenAI({ apiKey });
-  const model = premium ? PREMIUM_IMAGE_MODEL : IMAGE_MODEL;
-
-  const prompt = buildStagingPrompt(
+  // Step 1: Claude analyzes the image and crafts the perfect prompt
+  const prompt = await craftStagingPrompt(
+    imageBase64,
+    mimeType,
     style,
     roomType,
     colorPreference,
-    instructions,
-    isFirstInBatch,
-    styleReference
+    instructions
   );
 
+  // Step 2: Send image + Claude's prompt to Gemini for image generation
+  const client = new GoogleGenAI({ apiKey });
+
   const response = await client.models.generateContent({
-    model,
+    model: IMAGE_MODEL,
     contents: [
       {
         role: "user",
@@ -127,11 +186,15 @@ export async function stageImage(
     }
   }
 
-  throw new Error(
-    "No image in Gemini response. The model returned text only. Try again."
-  );
+  // If no image, check if there's text explaining why
+  const textPart = parts.find((p) => p.text);
+  const reason = textPart?.text || "Unknown reason";
+  throw new Error(`Gemini returned no image. Response: ${reason.slice(0, 200)}`);
 }
 
+// ---------------------------------------------------------------------------
+// Refine a staged image
+// ---------------------------------------------------------------------------
 export async function refineImage(
   apiKey: string,
   imageBase64: string,
@@ -140,21 +203,20 @@ export async function refineImage(
 ): Promise<{ imageBase64: string; mimeType: string }> {
   const client = new GoogleGenAI({ apiKey });
 
+  const prompt = `Using the provided image, make the following change to this staged room:
+
+${instruction}
+
+Keep the original layout, walls, windows, flooring, and every architectural detail EXACTLY the same. Only modify the furniture and decor as instructed. Preserve the camera angle, lighting, and physics. Professional real estate listing photography quality. Generate the updated image now.`;
+
   const response = await client.models.generateContent({
     model: IMAGE_MODEL,
     contents: [
       {
         role: "user",
         parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: imageBase64,
-            },
-          },
-          {
-            text: buildRefinementPrompt(instruction),
-          },
+          { inlineData: { mimeType, data: imageBase64 } },
+          { text: prompt },
         ],
       },
     ],
@@ -164,9 +226,7 @@ export async function refineImage(
   });
 
   const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
-    throw new Error("No response from Gemini API");
-  }
+  if (!parts) throw new Error("No response from Gemini API");
 
   for (const part of parts) {
     if (part.inlineData) {
@@ -177,54 +237,8 @@ export async function refineImage(
     }
   }
 
-  throw new Error("No image in Gemini refinement response. Try again.");
-}
-
-export async function detectRoomType(
-  apiKey: string,
-  imageBase64: string,
-  mimeType: string
-): Promise<string> {
-  const client = new GoogleGenAI({ apiKey });
-
-  const response = await client.models.generateContent({
-    model: TEXT_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: imageBase64,
-            },
-          },
-          {
-            text: buildRoomDetectionPrompt(),
-          },
-        ],
-      },
-    ],
-  });
-
-  const text =
-    response.candidates?.[0]?.content?.parts?.[0]?.text
-      ?.trim()
-      .toLowerCase()
-      .replace(/[^a-z_]/g, "") || "living_room";
-
-  const validTypes = [
-    "living_room",
-    "bedroom",
-    "kitchen",
-    "bathroom",
-    "dining_room",
-    "office",
-    "closet",
-    "outdoor",
-    "laundry",
-    "entryway",
-    "garage",
-  ];
-  return validTypes.includes(text) ? text : "living_room";
+  const textPart = parts.find((p) => p.text);
+  throw new Error(
+    `Gemini returned no image: ${textPart?.text?.slice(0, 200) || "Unknown"}`
+  );
 }

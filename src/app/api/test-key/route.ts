@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     const client = new GoogleGenAI({ apiKey });
 
-    // Minimal API call to verify the key works
+    // Test with the image model since that's what staging uses
     const response = await client.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: "Say OK" }] }],
@@ -29,8 +29,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No response" }, { status: 500 });
   } catch (error) {
     console.error("Key test error:", error);
+    const message = error instanceof Error ? error.message : "Invalid API key";
     return NextResponse.json(
-      { error: "Invalid API key" },
+      { error: message },
       { status: 401 }
     );
   }
