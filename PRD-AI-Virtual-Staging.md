@@ -387,17 +387,42 @@ These are noted for architecture planning only. Do not implement in V1.
 - **MLS Auto-Import**: Pull listing photos automatically from MLS by address or MLS ID via RESO Web API. Agent enters their MLS number, photos populate instantly — no manual upload needed
 - **MLS Direct Push**: Push staged photos back to BeachesMLS, Bright MLS, etc. via RESO Web API. Bidirectional MLS integration = zero friction
 - **Listing Description Generator**: AI-generated property descriptions from staged photos
+- **Native iOS App**: Swift/SwiftUI native app. Camera capture → instant staging on-site at a property. Share directly to MLS, Instagram, iMessage. Offline queue that syncs when connected. Haptic feedback on staging completion. Face ID for brokerage accounts. Push notifications when batch staging completes. Eventually: on-device ML for instant room detection without server round-trip
+- **Drawing Annotator**: Drag-and-drop labels on the photo to guide furniture placement (e.g., draw a rectangle and label it "sofa" or "dining table"). The annotation layer is sent to Claude as additional context for prompt generation
+- **Google Stitch Integration**: Evaluate Google Stitch for higher-quality image composition. Potentially use as alternative or upgrade path to Gemini Flash for premium tier staging
 
 ---
 
 ## 8. Pricing Model
 
-| Plan | Price | Credits | Features |
-|---|---|---|---|
-| Free | $0 | 5 photos | Single style, MLS export only |
-| Pro | $49/mo | 100 photos/mo | All styles, all exports, batch processing, filters |
-| Enterprise | $149/mo | 500 photos/mo | Everything + priority processing, custom styles, API access |
-| Pay-as-you-go | $0.50/photo | N/A | Available on any plan for overages |
+### 8.1 Cost Analysis (per staged image)
+
+| Cost Component | Per Image |
+|---|---|
+| Claude Sonnet (prompt crafting) | ~$0.008 (500 input + 1000 output tokens) |
+| Gemini 2.5 Flash Image (generation) | ~$0.04 (image input + output) |
+| Claude (room detection, one-time) | ~$0.005 |
+| Vercel compute / bandwidth | ~$0.002 |
+| **Total cost per image** | **~$0.055** |
+
+### 8.2 Pricing Tiers (targeting 70%+ gross margin)
+
+| Plan | Price | Images/mo | Cost/mo | Margin | Features |
+|---|---|---|---|---|---|
+| Starter | $10/mo | 50 images | $2.75 | 72.5% | All 13 styles, all exports, batch processing, before/after slider, edit/reprompt |
+| Pro | $29/mo | 200 images | $11.00 | 62% | Everything in Starter + priority processing, color preferences, custom instructions |
+| Agency | $79/mo | 750 images | $41.25 | 47.8% | Everything in Pro + team seats (3), listing sharing, brand watermark, API access |
+| Brokerage | $249/mo | 3000 images | $165.00 | 33.7% | Everything in Agency + unlimited seats, custom styles by our design team, dedicated Slack support, white-label option |
+| Enterprise | Custom | Unlimited | — | — | White-label, custom AI training on brand guidelines, MLS direct integration, onboarding + support |
+| Pay-as-you-go | $0.25/image | N/A | — | 78% | Available on any plan for overages |
+
+**Note:** Starter and Pro have excellent margins. Agency and Brokerage have lower per-image margins but higher total revenue per account. Enterprise is custom-quoted. The $0.25/image overage rate has 78% margin.
+
+### 8.3 Free Tier
+- 3 free stagings (no credit card required)
+- Single style per image
+- MLS export format only
+- Watermarked with "Staged with StageAI"
 
 ---
 

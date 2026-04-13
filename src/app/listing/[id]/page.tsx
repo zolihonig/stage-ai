@@ -20,7 +20,7 @@ import {
   Palette,
   X,
 } from "lucide-react";
-import { getListing, saveListing, getApiKey } from "@/lib/store";
+import { getListing, saveListing } from "@/lib/store";
 import type { Listing, StagedPhoto } from "@/lib/store";
 import {
   STYLES,
@@ -79,8 +79,7 @@ export default function ListingDetailPage({
       colorPref: ColorPreferenceId | null,
       instructions: string
     ) => {
-      const apiKey = getApiKey();
-      if (!apiKey) { alert("Add your Gemini API key in Settings."); return; }
+      // API key is server-side now
 
       setIsStaging(true);
       const colorName = colorPref
@@ -114,7 +113,7 @@ export default function ListingDetailPage({
           const res = await fetch("/api/stage", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageBase64: base64, mimeType, style: item.style, roomType: roomTypeName, colorPreference: colorName, instructions, apiKey }),
+            body: JSON.stringify({ imageBase64: base64, mimeType, style: item.style, roomType: roomTypeName, colorPreference: colorName, instructions }),
           });
 
           if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `API error: ${res.status}`); }
@@ -147,8 +146,7 @@ export default function ListingDetailPage({
   const restageWithStyle = useCallback(
     async (photoId: string, styleName: string) => {
       if (!listing) return;
-      const apiKey = getApiKey();
-      if (!apiKey) { alert("Add your Gemini API key in Settings."); return; }
+      // API key is server-side now
 
       const photo = listing.photos.find((p) => p.id === photoId);
       if (!photo) return;
@@ -164,7 +162,7 @@ export default function ListingDetailPage({
         const res = await fetch("/api/stage", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64, mimeType, style: styleName, roomType: roomTypeName, apiKey }),
+          body: JSON.stringify({ imageBase64: base64, mimeType, style: styleName, roomType: roomTypeName }),
         });
 
         if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `API error`); }
@@ -224,8 +222,6 @@ export default function ListingDetailPage({
   }, [id]);
 
   const handleRefine = async (stagedPhoto: StagedPhoto, instruction: string) => {
-    const apiKey = getApiKey();
-    if (!apiKey) { alert("Add your Gemini API key in Settings."); return; }
     setRefinementLoading(true);
     try {
       const base64 = stagedPhoto.dataUrl.split(",")[1];
@@ -233,7 +229,7 @@ export default function ListingDetailPage({
       const res = await fetch("/api/refine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mimeType, instruction, apiKey }),
+        body: JSON.stringify({ imageBase64: base64, mimeType, instruction }),
       });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Refinement failed"); }
       const data = await res.json();

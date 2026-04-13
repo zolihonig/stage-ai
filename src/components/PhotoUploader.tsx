@@ -9,13 +9,11 @@ import { v4 as uuidv4 } from "uuid";
 interface PhotoUploaderProps {
   photos: Photo[];
   onPhotosChange: React.Dispatch<React.SetStateAction<Photo[]>>;
-  apiKey?: string;
 }
 
 export default function PhotoUploader({
   photos,
   onPhotosChange,
-  apiKey,
 }: PhotoUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [detecting, setDetecting] = useState<Set<string>>(new Set());
@@ -100,7 +98,7 @@ export default function PhotoUploader({
         }
       }
     },
-    [onPhotosChange, apiKey]
+    [onPhotosChange]
   );
 
   const handleDrop = useCallback(

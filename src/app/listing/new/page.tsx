@@ -6,7 +6,6 @@ import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
 import { type Photo, saveListing } from "@/lib/store";
-import { getApiKey } from "@/lib/store";
 import type { StyleId, ColorPreferenceId } from "@/lib/constants";
 import { v4 as uuidv4 } from "uuid";
 
@@ -21,7 +20,6 @@ export default function NewListingPage() {
     useState<ColorPreferenceId | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
   const [saving, setSaving] = useState(false);
-  const apiKey = typeof window !== "undefined" ? getApiKey() : "";
 
   const toggleStyle = (id: StyleId) => {
     setSelectedStyles((prev) =>
@@ -144,7 +142,6 @@ export default function NewListingPage() {
           <PhotoUploader
             photos={photos}
             onPhotosChange={setPhotos}
-            apiKey={apiKey}
           />
           <div className="flex items-center gap-3">
             <button
@@ -219,15 +216,6 @@ export default function NewListingPage() {
               )}
             </button>
           </div>
-          {!apiKey && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-              <strong>Note:</strong> Add your Gemini API key in{" "}
-              <a href="/settings" className="underline font-medium">
-                Settings
-              </a>{" "}
-              before staging.
-            </div>
-          )}
         </div>
       )}
     </div>
