@@ -104,6 +104,7 @@ export default function ListingDetailPage({
 
         try {
           const base64 = photo.dataUrl.split(",")[1];
+          const mimeType = photo.dataUrl.split(";")[0].split(":")[1] || "image/jpeg";
           const roomTypeName =
             ROOM_TYPES.find((r) => r.id === photo.roomType)?.name || photo.roomType;
 
@@ -113,7 +114,7 @@ export default function ListingDetailPage({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               imageBase64: base64,
-              mimeType: "image/jpeg",
+              mimeType,
               style: item.style,
               roomType: roomTypeName,
               colorPreference: colorName,
@@ -305,13 +306,18 @@ export default function ListingDetailPage({
         </div>
       )}
 
-      {/* Photo Results */}
-      <div className="space-y-8">
+      {/* Photo Results — side by side grid */}
+      <div className="space-y-6">
         {listing.photos.map((photo) => {
           const staged = getStyledPhotos(photo.id);
+          const isProcessing =
+            isStaging &&
+            queue.some(
+              (q) => q.photoId === photo.id && (q.status === "pending" || q.status === "processing")
+            );
           return (
             <div key={photo.id}>
-              <h3 className="font-serif text-base text-navy mb-3 flex items-center gap-2">
+              <h3 className="font-serif text-base text-navy mb-2 flex items-center gap-2">
                 {ROOM_TYPES.find((r) => r.id === photo.roomType)?.name || photo.roomType}
                 {staged.length > 0 && (
                   <span className="text-[10px] font-semibold tracking-wider uppercase text-gold bg-gold/10 px-2 py-0.5 rounded-full">
@@ -320,105 +326,145 @@ export default function ListingDetailPage({
                 )}
               </h3>
 
-              {/* Original photo */}
-              <div className="mb-3">
-                <div className="rounded-xl overflow-hidden border border-navy/10 shadow-sm inline-block w-full sm:w-auto sm:max-w-sm">
+              {/* Side-by-side: Original | Staged (or spinner) */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2">
+                {/* Original */}
+                <div className="rounded-xl overflow-hidden border border-navy/10 shadow-sm">
                   <div className="aspect-[4/3] relative">
                     <img src={photo.dataUrl} alt="Original" className="w-full h-full object-cover" />
-                    <div className="absolute top-2 left-2 bg-navy/70 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-sm">
+                    <div className="absolute top-1.5 left-1.5 bg-navy/70 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">
                       Original
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Staged versions */}
-              {staged.map((sp) => (
-                <div key={sp.id} className="mb-4">
-                  {/* Slider vs static toggle */}
-                  {sliderMode.has(sp.id) ? (
-                    <div className="relative">
-                      <BeforeAfterSlider
-                        beforeSrc={photo.dataUrl}
-                        afterSrc={sp.dataUrl}
-                        beforeLabel="Original"
-                        afterLabel={sp.style}
-                        className="aspect-[4/3] rounded-xl max-w-2xl"
+                {/* Staged or loading */}
+                {staged.length > 0 ? (
+                  <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm relative group">
+                    <div className="aspect-[4/3] relative">
+                      <img
+                        src={staged[0].dataUrl}
+                        alt={staged[0].style}
+                        className="w-full h-full object-cover"
                       />
+                      <div className="absolute top-1.5 left-1.5 bg-gold/90 text-navy text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded backdrop-blur-sm">
+                        {staged[0].style}
+                      </div>
                       <button
-                        onClick={() => toggleSlider(sp.id)}
-                        className="absolute top-2 right-2 z-20 bg-navy/70 hover:bg-navy text-white text-[10px] px-2 py-1 rounded backdrop-blur-sm flex items-center gap-1"
+                        onClick={() => toggleSlider(staged[0].id)}
+                        className="absolute top-1.5 right-1.5 bg-navy/70 hover:bg-navy text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm flex items-center gap-1"
                       >
-                        <Grid3X3 size={10} />
-                        Static
+                        <SlidersHorizontal size={10} />
+                        Compare
                       </button>
                     </div>
-                  ) : (
-                    <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm max-w-2xl relative group">
-                      <div className="aspect-[4/3] relative">
-                        <img src={sp.dataUrl} alt={sp.style} className="w-full h-full object-cover" />
-                        <div className="absolute top-2 left-2 bg-gold/90 text-navy text-[10px] font-medium px-2 py-0.5 rounded backdrop-blur-sm">
-                          {sp.style}
-                        </div>
-                        <button
-                          onClick={() => toggleSlider(sp.id)}
-                          className="absolute top-2 right-2 bg-navy/70 hover:bg-navy text-white text-[10px] px-2 py-1 rounded backdrop-blur-sm flex items-center gap-1 opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity"
-                        >
-                          <SlidersHorizontal size={10} />
-                          Compare
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Info + actions bar — always visible, mobile-friendly */}
-                  <div className="max-w-2xl mt-2 flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate">
-                        {sp.style} · {(sp.generationTimeMs / 1000).toFixed(1)}s
-                      </span>
-                      {!refiningId && (
-                        <button
-                          onClick={() => setRefiningId(sp.id)}
-                          className="flex items-center gap-1.5 text-xs font-medium text-gold bg-gold/10 hover:bg-gold/20 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          <Wand2 size={12} />
-                          Edit / Reprompt
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Refinement panel */}
-                    {refiningId === sp.id && (
-                      <RefinementPanel
-                        loading={refinementLoading}
-                        input={refinementInput}
-                        onInputChange={setRefinementInput}
-                        onRefine={(instruction) => handleRefine(sp, instruction)}
-                        onClose={() => {
-                          setRefiningId(null);
-                          setRefinementInput("");
-                        }}
-                      />
-                    )}
                   </div>
-                </div>
-              ))}
-
-              {/* Processing placeholder */}
-              {isStaging &&
-                queue.some(
-                  (q) => q.photoId === photo.id && (q.status === "pending" || q.status === "processing")
-                ) && (
-                  <div className="rounded-xl overflow-hidden border border-navy/10 bg-ivory-light max-w-2xl mb-4">
+                ) : isProcessing ? (
+                  <div className="rounded-xl overflow-hidden border border-navy/10 bg-ivory-light">
                     <div className="aspect-[4/3] flex items-center justify-center">
                       <div className="text-center">
-                        <Loader2 size={24} className="text-gold animate-spin mx-auto mb-2" />
-                        <p className="text-xs text-slate">Staging...</p>
+                        <Loader2 size={20} className="text-gold animate-spin mx-auto mb-1" />
+                        <p className="text-[10px] text-slate">Staging...</p>
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border border-dashed border-navy/10 bg-ivory-light/50">
+                    <div className="aspect-[4/3] flex items-center justify-center">
+                      <p className="text-[10px] text-slate/50">Not staged</p>
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Slider mode overlay */}
+              {staged.length > 0 && sliderMode.has(staged[0].id) && (
+                <div className="relative mb-2">
+                  <BeforeAfterSlider
+                    beforeSrc={photo.dataUrl}
+                    afterSrc={staged[0].dataUrl}
+                    beforeLabel="Original"
+                    afterLabel={staged[0].style}
+                    className="aspect-[4/3] rounded-xl"
+                  />
+                  <button
+                    onClick={() => toggleSlider(staged[0].id)}
+                    className="absolute top-2 right-2 z-20 bg-navy/70 hover:bg-navy text-white text-[10px] px-2 py-1 rounded backdrop-blur-sm flex items-center gap-1"
+                  >
+                    <Grid3X3 size={10} />
+                    Close
+                  </button>
+                </div>
+              )}
+
+              {/* Edit / Reprompt bar for first staged image */}
+              {staged.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate">
+                      {staged[0].style} · {(staged[0].generationTimeMs / 1000).toFixed(1)}s
+                    </span>
+                    {refiningId !== staged[0].id && (
+                      <button
+                        onClick={() => setRefiningId(staged[0].id)}
+                        className="flex items-center gap-1.5 text-xs font-medium text-gold bg-gold/10 hover:bg-gold/20 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <Wand2 size={12} />
+                        Edit / Reprompt
+                      </button>
+                    )}
+                  </div>
+                  {refiningId === staged[0].id && (
+                    <RefinementPanel
+                      loading={refinementLoading}
+                      input={refinementInput}
+                      onInputChange={setRefinementInput}
+                      onRefine={(instruction) => handleRefine(staged[0], instruction)}
+                      onClose={() => {
+                        setRefiningId(null);
+                        setRefinementInput("");
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Additional styles (2nd, 3rd) shown below */}
+              {staged.length > 1 &&
+                staged.slice(1).map((sp) => (
+                  <div key={sp.id} className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+                    <div />
+                    <div>
+                      <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm relative group">
+                        <div className="aspect-[4/3] relative">
+                          <img src={sp.dataUrl} alt={sp.style} className="w-full h-full object-cover" />
+                          <div className="absolute top-1.5 left-1.5 bg-gold/90 text-navy text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded backdrop-blur-sm">
+                            {sp.style}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-slate">{sp.style}</span>
+                        <button
+                          onClick={() => setRefiningId(sp.id)}
+                          className="text-[10px] text-gold hover:text-gold-dark flex items-center gap-1"
+                        >
+                          <Wand2 size={10} />
+                          Edit
+                        </button>
+                      </div>
+                      {refiningId === sp.id && (
+                        <RefinementPanel
+                          loading={refinementLoading}
+                          input={refinementInput}
+                          onInputChange={setRefinementInput}
+                          onRefine={(instruction) => handleRefine(sp, instruction)}
+                          onClose={() => { setRefiningId(null); setRefinementInput(""); }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))}
             </div>
           );
         })}
