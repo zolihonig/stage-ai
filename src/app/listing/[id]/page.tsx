@@ -483,7 +483,13 @@ export default function ListingDetailPage({
                   <div className="flex items-center justify-between flex-wrap gap-2">
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {current && (
+                        <button
+                          onClick={() => restageWithStyle(photo.id, current.style)}
+                          className="flex items-center gap-1 text-[11px] font-medium text-slate bg-navy/5 hover:bg-navy/10 px-2.5 py-1.5 rounded-lg transition-colors"
+                        ><RefreshCw size={11} />Re-stage</button>
+                      )}
                       <button
                         onClick={() => setStylePickerOpen(stylePickerOpen === photo.id ? null : photo.id)}
                         className="flex items-center gap-1 text-[11px] font-medium text-navy bg-navy/5 hover:bg-navy/10 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -503,19 +509,35 @@ export default function ListingDetailPage({
                   {historyOpen === photo.id && allVersions.length > 1 && (
                     <div className="bg-ivory-light rounded-xl p-3 border border-navy/5">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-navy">Generation History</span>
+                        <span className="text-xs font-medium text-navy">Generation History ({allVersions.length})</span>
                         <button onClick={() => setHistoryOpen(null)} className="text-slate hover:text-navy"><X size={14} /></button>
                       </div>
-                      <div className="flex gap-2 overflow-x-auto pb-1">
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                         {allVersions.map((v, i) => (
-                          <button
-                            key={v.id}
-                            onClick={() => { setActiveVersion((p) => ({ ...p, [photo.id]: i })); setHistoryOpen(null); }}
-                            className={`shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${i === versionIdx ? "border-gold" : "border-transparent hover:border-gold/30"}`}
-                          >
-                            <img src={v.dataUrl} alt={v.style} className="w-16 h-12 sm:w-20 sm:h-14 object-cover" />
-                            <p className="text-[8px] text-center text-slate py-0.5 truncate max-w-16 sm:max-w-20">{v.style}</p>
-                          </button>
+                          <div key={v.id} className="shrink-0 relative group/hist">
+                            <button
+                              onClick={() => { setActiveVersion((p) => ({ ...p, [photo.id]: i })); setHistoryOpen(null); }}
+                              className={`rounded-lg overflow-hidden border-2 transition-colors ${i === versionIdx ? "border-gold" : "border-transparent hover:border-gold/30"}`}
+                            >
+                              <img src={v.dataUrl} alt={v.style} className="w-16 h-12 sm:w-20 sm:h-14 object-cover" />
+                              <p className="text-[8px] text-center text-slate py-0.5 truncate max-w-16 sm:max-w-20">{v.style}</p>
+                            </button>
+                            {allVersions.length > 1 && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!listing) return;
+                                  const updated = { ...listing, stagedPhotos: listing.stagedPhotos.filter((s) => s.id !== v.id) };
+                                  await saveListing(updated);
+                                  setListing(updated);
+                                  if (versionIdx >= updated.stagedPhotos.filter((s) => s.photoId === photo.id).length) {
+                                    setActiveVersion((p) => ({ ...p, [photo.id]: Math.max(0, versionIdx - 1) }));
+                                  }
+                                }}
+                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/hist:opacity-100 transition-opacity"
+                              ><X size={8} /></button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
