@@ -390,6 +390,8 @@ These are noted for architecture planning only. Do not implement in V1.
 - **Native iOS App**: Swift/SwiftUI native app. Camera capture → instant staging on-site at a property. Share directly to MLS, Instagram, iMessage. Offline queue that syncs when connected. Haptic feedback on staging completion. Face ID for brokerage accounts. Push notifications when batch staging completes. Eventually: on-device ML for instant room detection without server round-trip
 - **Drawing Annotator**: Drag-and-drop labels on the photo to guide furniture placement (e.g., draw a rectangle and label it "sofa" or "dining table"). The annotation layer is sent to Claude as additional context for prompt generation
 - **Google Stitch Integration**: Evaluate Google Stitch for higher-quality image composition. Potentially use as alternative or upgrade path to Gemini Flash for premium tier staging
+- **Cloud Import**: Paste a Google Drive or Dropbox shared link to import all photos from a folder. Agent shares their listing photos folder, StageAI pulls them all in automatically. No manual upload needed
+- **Preview-then-Batch**: Stage the first photo as a preview. If the user likes it, process the remaining 15-25 photos automatically. If not, try a different style. Saves API costs on bad style choices
 
 ---
 

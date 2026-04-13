@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
+import { buildDesignAnalysisPrompt } from "./interior-design-prompt";
 
 // Image generation model
 const IMAGE_MODEL = "gemini-2.5-flash-image";
@@ -80,7 +81,7 @@ async function craftStagingPrompt(
 
   const response = await claude.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: 1000,
+    max_tokens: 1500,
     messages: [
       {
         role: "user",
@@ -91,41 +92,7 @@ async function craftStagingPrompt(
           },
           {
             type: "text",
-            text: `You are the world's best prompt engineer for Google Gemini image editing (Nano Banana). Analyze this real estate photo and write a single, optimized prompt to virtually stage it.
-
-ROOM TYPE: ${roomType}
-DESIRED STYLE: ${style}
-${colorPreference ? `COLOR PALETTE: ${colorPreference}` : ""}
-${instructions ? `ADDITIONAL INSTRUCTIONS: ${instructions}` : ""}
-
-STEP 1 — Analyze the photo carefully:
-1. The exact lighting — direction, color temperature, intensity, shadow angles
-2. The floor material and color
-3. The wall color and finish
-4. Window placement and natural light sources
-5. The room dimensions and proportions (estimate in feet)
-6. Any existing fixtures, built-ins, or appliances that must remain
-7. ALL doorways, closet openings, hallway entrances — their exact positions
-8. Traffic flow paths — how a person would walk through this room
-
-STEP 2 — Plan furniture layout with these CRITICAL RULES:
-- NEVER place furniture blocking or partially blocking ANY doorway, closet opening, or hallway entrance
-- NEVER place a bed, sofa, or table in front of a door — leave at minimum 3 feet clearance
-- NEVER block windows — keep furniture below window sill height
-- Place the primary furniture piece (bed/sofa) on the LARGEST open wall, AWAY from doors
-- Ensure at least 2-3 feet of walking space around all sides of major furniture
-- For bedrooms: bed goes on wall OPPOSITE the door, or the longest wall without a door/closet
-- For living rooms: sofa faces the focal point (window/fireplace), not blocking entries
-
-STEP 3 — Write the prompt:
-- Start with "Using the provided image of this ${roomType}..."
-- Specify EXACT furniture pieces with materials, colors, and specific placement (e.g., "place the bed centered on the far wall, between the two windows, with nightstands on each side")
-- Explicitly state "leave the doorway at [position] completely clear and unblocked"
-- Describe shadows and reflections matching the EXISTING lighting
-- Use: "professional real estate photography, medium-format camera, natural grain"
-- Force preservation of all architectural elements
-
-Output ONLY the prompt text. No explanation, no JSON wrapper.`,
+            text: buildDesignAnalysisPrompt(style, roomType, colorPreference, instructions),
           },
         ],
       },

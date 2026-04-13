@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Palette,
   X,
+  Sparkles,
 } from "lucide-react";
 import { getListing, saveListing } from "@/lib/store";
 import type { Listing, StagedPhoto } from "@/lib/store";
@@ -62,6 +63,10 @@ export default function ListingDetailPage({
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
   // Show style picker for re-staging
   const [stylePickerOpen, setStylePickerOpen] = useState<string | null>(null);
+  // Preview mode: stage first photo, ask for approval before batch
+  const [previewMode, setPreviewMode] = useState(false);
+  const [previewApproved, setPreviewApproved] = useState(false);
+  const [pendingBatchArgs, setPendingBatchArgs] = useState<{ listing: Listing; styles: StyleId[]; colorPref: ColorPreferenceId | null; instructions: string } | null>(null);
 
   const toggleSlider = (id: string) => {
     setSliderMode((prev) => {
@@ -72,28 +77,27 @@ export default function ListingDetailPage({
     });
   };
 
-  const startStaging = useCallback(
+  const stagePhotos = useCallback(
     async (
       currentListing: Listing,
+      photosToStage: typeof currentListing.photos,
       styles: StyleId[],
       colorPref: ColorPreferenceId | null,
       instructions: string
     ) => {
-      // API key is server-side now
-
       setIsStaging(true);
       const colorName = colorPref
         ? COLOR_PREFERENCES.find((c) => c.id === colorPref)?.description || ""
         : "";
 
       const queueItems: QueueItem[] = [];
-      for (const photo of currentListing.photos) {
+      for (const photo of photosToStage) {
         for (const style of styles) {
           const styleName = STYLES.find((s) => s.id === style)?.name || style;
           queueItems.push({ photoId: photo.id, photoName: photo.fileName, style: styleName, status: "pending" });
         }
       }
-      setQueue(queueItems);
+      setQueue((prev) => [...prev, ...queueItems]);
 
       const updatedListing = { ...currentListing };
       const newStagedPhotos: StagedPhoto[] = [...currentListing.stagedPhotos];
@@ -141,6 +145,41 @@ export default function ListingDetailPage({
     },
     []
   );
+
+  // Preview-first staging: stage first photo, wait for approval, then batch the rest
+  const startStaging = useCallback(
+    async (
+      currentListing: Listing,
+      styles: StyleId[],
+      colorPref: ColorPreferenceId | null,
+      instructions: string
+    ) => {
+      if (currentListing.photos.length > 1) {
+        // Preview mode: stage just the first photo
+        setPreviewMode(true);
+        setPendingBatchArgs({ listing: currentListing, styles, colorPref, instructions });
+        await stagePhotos(currentListing, [currentListing.photos[0]], styles, colorPref, instructions);
+      } else {
+        // Single photo, just stage it
+        await stagePhotos(currentListing, currentListing.photos, styles, colorPref, instructions);
+      }
+    },
+    [stagePhotos]
+  );
+
+  // Called when user approves the preview
+  const approveAndStageAll = useCallback(async () => {
+    if (!pendingBatchArgs || !listing) return;
+    const { styles, colorPref, instructions } = pendingBatchArgs;
+    setPreviewMode(false);
+    setPreviewApproved(true);
+    // Stage remaining photos (skip the first one, already done)
+    const remaining = listing.photos.slice(1);
+    if (remaining.length > 0) {
+      await stagePhotos(listing, remaining, styles, colorPref, instructions);
+    }
+    setPendingBatchArgs(null);
+  }, [pendingBatchArgs, listing, stagePhotos]);
 
   // Re-stage a single photo with a new style
   const restageWithStyle = useCallback(
@@ -295,6 +334,38 @@ export default function ListingDetailPage({
       </div>
 
       {queue.length > 0 && isStaging && <div className="mb-5"><StagingQueue items={queue} /></div>}
+
+      {/* Preview approval banner */}
+      {previewMode && !isStaging && listing.stagedPhotos.length > 0 && !previewApproved && (
+        <div className="mb-5 bg-gold/5 border-2 border-gold/30 rounded-2xl p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-serif text-base text-navy">Preview ready</p>
+              <p className="text-sm text-slate mt-0.5">
+                Here&apos;s the first photo staged. Happy with it? Stage the remaining {(listing?.photos.length || 1) - 1} photos, or try a different style.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setPreviewMode(false);
+                  setStylePickerOpen(listing.photos[0]?.id || null);
+                }}
+                className="text-sm border border-navy/15 text-navy px-4 py-2 rounded-xl hover:bg-ivory-light transition-colors"
+              >
+                Try Different Style
+              </button>
+              <button
+                onClick={approveAndStageAll}
+                className="text-sm bg-gold hover:bg-gold-dark text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-1.5"
+              >
+                <Sparkles size={14} />
+                Stage All {(listing?.photos.length || 1) - 1} Remaining
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Photo Results */}
       <div className="space-y-6">
