@@ -543,6 +543,7 @@ export default function ListingDetailPage({
       <ExportModal
         isOpen={showExport}
         onClose={() => setShowExport(false)}
+        listingName={listing.name}
         images={listing.stagedPhotos.map((sp) => {
           const photo = listing.photos.find((p) => p.id === sp.photoId);
           return {

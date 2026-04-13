@@ -1,13 +1,11 @@
-// Client-side image export with canvas-based resizing
-// Handles all export formats: MLS, Instagram, print, etc.
-
+import JSZip from "jszip";
 import { EXPORT_FORMATS } from "./constants";
 import type { ExportFormat } from "./constants";
 
-interface ExportOptions {
+export interface ExportOptions {
   format: ExportFormat;
   watermark: boolean;
-  quality: number; // 0-100
+  quality: number;
 }
 
 function resizeToFormat(
@@ -21,7 +19,6 @@ function resizeToFormat(
     const canvas = document.createElement("canvas");
 
     if (targetWidth === 0 || targetHeight === 0) {
-      // Original resolution
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
     } else {
@@ -31,10 +28,9 @@ function resizeToFormat(
 
     const ctx = canvas.getContext("2d")!;
 
-    // Draw image with cover-fit (crop to fill)
+    // Cover-fit crop
     const srcRatio = img.naturalWidth / img.naturalHeight;
     const dstRatio = canvas.width / canvas.height;
-
     let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
     if (srcRatio > dstRatio) {
       sw = img.naturalHeight * dstRatio;
@@ -43,67 +39,65 @@ function resizeToFormat(
       sh = img.naturalWidth / dstRatio;
       sy = (img.naturalHeight - sh) / 2;
     }
-
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-    // Add watermark if requested
+    // Watermark
     if (watermark) {
-      const fontSize = Math.max(12, canvas.width * 0.015);
-      ctx.font = `${fontSize}px Inter, sans-serif`;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
-      ctx.lineWidth = 1;
+      const fontSize = Math.max(14, canvas.width * 0.018);
+      ctx.font = `500 ${fontSize}px Inter, system-ui, sans-serif`;
       const text = "Virtually Staged";
       const metrics = ctx.measureText(text);
-      const x = canvas.width - metrics.width - fontSize;
-      const y = canvas.height - fontSize;
-      ctx.strokeText(text, x, y);
+      const x = canvas.width - metrics.width - fontSize * 1.2;
+      const y = canvas.height - fontSize * 1.2;
+      // Shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillText(text, x + 1, y + 1);
+      // White text
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
       ctx.fillText(text, x, y);
     }
 
-    canvas.toBlob(
-      (blob) => resolve(blob!),
-      "image/jpeg",
-      quality / 100
-    );
+    canvas.toBlob((blob) => resolve(blob!), "image/jpeg", quality / 100);
   });
 }
 
-export async function exportImage(
-  dataUrl: string,
-  options: ExportOptions
-): Promise<Blob> {
+export async function exportImage(dataUrl: string, options: ExportOptions): Promise<Blob> {
   const format = EXPORT_FORMATS.find((f) => f.id === options.format)!;
-
   const img = await new Promise<HTMLImageElement>((resolve) => {
     const i = new window.Image();
     i.onload = () => resolve(i);
     i.src = dataUrl;
   });
-
-  return resizeToFormat(
-    img,
-    format.width,
-    format.height,
-    options.quality,
-    options.watermark
-  );
+  return resizeToFormat(img, format.width, format.height, options.quality, options.watermark);
 }
 
 export async function exportAllAsZip(
-  images: { dataUrl: string; fileName: string }[],
-  options: ExportOptions
+  images: { dataUrl: string; fileName: string; style: string; roomType: string }[],
+  formats: ExportFormat[],
+  watermark: boolean,
+  quality: number,
+  onProgress?: (done: number, total: number) => void
 ): Promise<Blob> {
-  // Simple concatenation approach — create individual downloads
-  // For a real ZIP we'd need JSZip, but for now download individually
-  const blobs: { blob: Blob; name: string }[] = [];
-  for (const img of images) {
-    const blob = await exportImage(img.dataUrl, options);
-    blobs.push({ blob, name: img.fileName });
+  const zip = new JSZip();
+  let done = 0;
+  const total = images.length * formats.length;
+
+  for (const format of formats) {
+    const formatInfo = EXPORT_FORMATS.find((f) => f.id === format)!;
+    const folderName = formatInfo.name.replace(/\s/g, "-");
+    const folder = zip.folder(folderName)!;
+
+    for (const img of images) {
+      const blob = await exportImage(img.dataUrl, { format, watermark, quality });
+      const fileName = `${img.fileName}-${img.style}-${folderName}.jpg`
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      folder.file(fileName, blob);
+      done++;
+      onProgress?.(done, total);
+    }
   }
-  // Return the first blob for single downloads
-  // For multi-file, the caller handles iteration
-  return blobs[0].blob;
+
+  return zip.generateAsync({ type: "blob" });
 }
 
 export function downloadBlob(blob: Blob, fileName: string) {
