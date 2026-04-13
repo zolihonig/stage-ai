@@ -295,18 +295,7 @@ export default function ListingDetailPage({
     }
   };
 
-  const handleExport = async () => {
-    if (!listing) return;
-    for (const staged of listing.stagedPhotos) {
-      const link = document.createElement("a");
-      link.href = staged.dataUrl;
-      const photo = listing.photos.find((p) => p.id === staged.photoId);
-      link.download = `${listing.name}-${photo?.roomType || "room"}-${staged.style}.jpg`;
-      link.click();
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    setShowExport(false);
-  };
+  // Export is handled by ExportModal component
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 size={24} className="text-gold animate-spin" /></div>;
   if (!listing) return <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 text-center"><p className="text-slate">Listing not found.</p><Link href="/dashboard" className="text-gold underline text-sm mt-2 inline-block">Back to Dashboard</Link></div>;
@@ -551,7 +540,19 @@ export default function ListingDetailPage({
         </div>
       )}
 
-      <ExportModal isOpen={showExport} onClose={() => setShowExport(false)} photoCount={listing.stagedPhotos.length} onExport={handleExport} />
+      <ExportModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        images={listing.stagedPhotos.map((sp) => {
+          const photo = listing.photos.find((p) => p.id === sp.photoId);
+          return {
+            dataUrl: sp.dataUrl,
+            fileName: listing.name + "-" + (photo?.roomType || "room"),
+            style: sp.style,
+            roomType: photo?.roomType || "room",
+          };
+        })}
+      />
     </div>
   );
 }
