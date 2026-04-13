@@ -20,7 +20,7 @@ export default function StyleSelector({
   onColorChange,
   max = 3,
 }: StyleSelectorProps) {
-  const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
+  // Style images are in /public/styles/{id}.png
 
   return (
     <div className="space-y-6">
@@ -56,21 +56,17 @@ export default function StyleSelector({
                 )}
                 {/* Style preview image or gradient */}
                 <div className="aspect-[4/3] relative overflow-hidden">
-                  {previewImages[style.id] ? (
                     <img
-                      src={previewImages[style.id]}
-                      alt={style.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div
-                      className={`w-full h-full bg-gradient-to-br ${style.gradient} flex items-center justify-center`}
-                    >
-                      <span className="font-serif text-navy/20 text-2xl">
-                        {style.name.charAt(0)}
-                      </span>
-                    </div>
-                  )}
+                    src={`/styles/${style.id}.png`}
+                    alt={style.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      // Fallback to gradient if image missing
+                      const target = e.currentTarget;
+                      target.style.display = "none";
+                      target.parentElement!.classList.add("bg-gradient-to-br", ...style.gradient.split(" "));
+                    }}
+                  />
                   {/* Overlay on hover */}
                   <div className="absolute inset-0 bg-navy/0 group-hover:bg-navy/10 transition-colors" />
                 </div>
