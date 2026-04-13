@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
 import { type Photo, saveListing } from "@/lib/store";
@@ -14,10 +14,10 @@ export default function NewListingPage() {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<StyleId[]>([]);
-  const [colorPreference, setColorPreference] =
-    useState<ColorPreferenceId | null>(null);
+  const [colorPreference, setColorPreference] = useState<ColorPreferenceId | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -33,7 +33,7 @@ export default function NewListingPage() {
       const listingId = uuidv4();
       const listing = {
         id: listingId,
-        name: name || "Untitled Listing",
+        name: name || `Listing ${new Date().toLocaleDateString()}`,
         address,
         photos: photos.map((p) => ({ ...p, file: null })),
         stagedPhotos: [],
@@ -56,144 +56,117 @@ export default function NewListingPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-      {/* Steps indicator */}
-      <div className="flex items-center gap-2 mb-8">
-        {[1, 2, 3].map((s) => (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      {/* Steps */}
+      <div className="flex items-center gap-3 mb-6">
+        {[1, 2].map((s) => (
           <div key={s} className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                s === step
-                  ? "bg-gold text-white"
-                  : s < step
-                  ? "bg-gold/20 text-gold"
-                  : "bg-navy/5 text-navy/30"
-              }`}
-            >
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+              s === step ? "bg-gold text-white" : s < step ? "bg-gold/20 text-gold" : "bg-navy/5 text-navy/30"
+            }`}>
               {s}
             </div>
-            <span
-              className={`text-sm hidden sm:block ${
-                s === step ? "text-navy font-medium" : "text-slate"
-              }`}
-            >
-              {s === 1 ? "Details" : s === 2 ? "Photos" : "Style"}
+            <span className={`text-sm ${s === step ? "text-navy font-medium" : "text-slate"}`}>
+              {s === 1 ? "Photos" : "Style"}
             </span>
-            {s < 3 && <div className="w-8 h-px bg-navy/10" />}
+            {s < 2 && <div className="w-6 h-px bg-navy/10" />}
           </div>
         ))}
       </div>
 
-      {/* Step 1: Details */}
+      {/* Step 1: Upload Photos */}
       {step === 1 && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div>
-            <h1 className="font-serif text-2xl text-navy">New Listing</h1>
+            <h1 className="font-serif text-2xl text-navy">Upload Photos</h1>
             <p className="text-sm text-slate mt-1">
-              Give your listing a name and optional address.
+              Add your property photos. Room types are detected automatically.
             </p>
           </div>
-          <div className="space-y-4 max-w-md">
-            <div>
-              <label className="block text-sm font-medium text-navy mb-1.5">
-                Listing Name *
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., 123 Ocean Drive — Living Spaces"
-                className="w-full px-4 py-2.5 rounded-xl border border-navy/15 bg-white text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold"
-              />
+
+          <PhotoUploader photos={photos} onPhotosChange={setPhotos} />
+
+          {/* Optional listing details — collapsed by default */}
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-1.5 text-xs text-slate hover:text-navy transition-colors"
+          >
+            {showDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {showDetails ? "Hide" : "Add"} listing details (optional)
+          </button>
+
+          {showDetails && (
+            <div className="space-y-3 bg-ivory-light/50 rounded-xl p-4 border border-navy/5">
+              <div>
+                <label className="block text-xs font-medium text-navy mb-1">Listing Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., 123 Ocean Drive"
+                  className="w-full px-3 py-2 rounded-lg border border-navy/10 bg-white text-sm text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy mb-1">Address</label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="123 Ocean Drive, Miami Beach, FL"
+                  className="w-full px-3 py-2 rounded-lg border border-navy/10 bg-white text-sm text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-navy mb-1.5">
-                Address
-              </label>
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Ocean Drive, Miami Beach, FL"
-                className="w-full px-4 py-2.5 rounded-xl border border-navy/15 bg-white text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold"
-              />
-            </div>
-          </div>
+          )}
+
           <button
             onClick={() => setStep(2)}
-            disabled={!name.trim()}
+            disabled={photos.length === 0}
             className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Next: Upload Photos
+            Choose Style
             <ArrowRight size={16} />
           </button>
         </div>
       )}
 
-      {/* Step 2: Photos */}
+      {/* Step 2: Style */}
       {step === 2 && (
-        <div className="space-y-6">
-          <div>
-            <h1 className="font-serif text-2xl text-navy">Upload Photos</h1>
-            <p className="text-sm text-slate mt-1">
-              Add property photos. Room types are auto-detected.
-            </p>
-          </div>
-          <PhotoUploader
-            photos={photos}
-            onPhotosChange={setPhotos}
-          />
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setStep(1)}
-              className="inline-flex items-center gap-2 border border-navy/15 text-navy px-5 py-2.5 rounded-xl font-medium text-sm transition-colors hover:bg-ivory-light"
-            >
-              <ArrowLeft size={16} />
-              Back
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              disabled={photos.length === 0}
-              className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next: Choose Style
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: Style */}
-      {step === 3 && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div>
             <h1 className="font-serif text-2xl text-navy">Choose Style</h1>
             <p className="text-sm text-slate mt-1">
-              Pick a style for your staging. Select up to 3 to compare.
+              {photos.length > 1
+                ? `We'll preview the first photo, then stage all ${photos.length} if you like it.`
+                : "Pick a style and we'll stage your photo."}
             </p>
           </div>
+
           <StyleSelector
             selected={selectedStyles}
             onToggle={toggleStyle}
             colorPreference={colorPreference}
             onColorChange={setColorPreference}
           />
+
           <div>
-            <label className="block text-sm font-medium text-navy mb-1.5">
+            <label className="block text-xs font-medium text-navy mb-1">
               Custom Instructions (optional)
             </label>
             <textarea
               value={customInstructions}
               onChange={(e) => setCustomInstructions(e.target.value)}
-              placeholder="e.g., Keep it minimal with a focus on warm wood tones. No plants."
-              rows={3}
-              className="w-full px-4 py-2.5 rounded-xl border border-navy/15 bg-white text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold resize-none text-sm"
+              placeholder="e.g., Keep it minimal. Warm wood tones. No plants."
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-navy/10 bg-white text-sm text-navy placeholder:text-navy/30 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold resize-none"
             />
           </div>
+
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setStep(2)}
-              className="inline-flex items-center gap-2 border border-navy/15 text-navy px-5 py-2.5 rounded-xl font-medium text-sm transition-colors hover:bg-ivory-light"
+              onClick={() => setStep(1)}
+              className="inline-flex items-center gap-2 border border-navy/10 text-navy px-4 py-2.5 rounded-xl text-sm transition-colors hover:bg-ivory-light"
             >
               <ArrowLeft size={16} />
               Back
@@ -201,7 +174,7 @@ export default function NewListingPage() {
             <button
               onClick={handleCreate}
               disabled={selectedStyles.length === 0 || saving}
-              className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-6 py-3 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>
@@ -210,7 +183,7 @@ export default function NewListingPage() {
                 </>
               ) : (
                 <>
-                  Stage {photos.length} Photo{photos.length !== 1 ? "s" : ""}
+                  {photos.length > 1 ? "Preview & Stage" : `Stage ${photos.length} Photo`}
                   <ArrowRight size={16} />
                 </>
               )}
