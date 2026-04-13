@@ -167,7 +167,8 @@ export default function ListingDetailPage({
         }
 
         if (i < queueItems.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          // 8s delay between photos to stay under Gemini free tier rate limits
+          await new Promise((resolve) => setTimeout(resolve, 8000));
         }
       }
 

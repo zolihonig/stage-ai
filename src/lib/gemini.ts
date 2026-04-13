@@ -124,6 +124,35 @@ Output ONLY the prompt text. No explanation, no JSON wrapper. Just the prompt.`,
 }
 
 // ---------------------------------------------------------------------------
+// Retry wrapper for Gemini API calls (handles 429 rate limits)
+// ---------------------------------------------------------------------------
+async function callGeminiWithRetry(
+  fn: () => Promise<{ imageBase64: string; mimeType: string }>,
+  maxRetries = 3
+): Promise<{ imageBase64: string; mimeType: string }> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const isRateLimit = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+
+      if (isRateLimit && attempt < maxRetries) {
+        // Parse retry delay from error or use exponential backoff
+        const match = msg.match(/retry in ([\d.]+)s/i);
+        const delay = match ? Math.ceil(parseFloat(match[1]) * 1000) : (attempt + 1) * 20000;
+        console.log(`Rate limited. Retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
+// ---------------------------------------------------------------------------
 // Stage image: Claude crafts the prompt → Gemini generates the image
 // ---------------------------------------------------------------------------
 export async function stageImage(
@@ -146,50 +175,41 @@ export async function stageImage(
     instructions
   );
 
-  // Step 2: Send image + Claude's prompt to Gemini for image generation
-  const client = new GoogleGenAI({ apiKey });
+  // Step 2: Send image + Claude's prompt to Gemini with retry for rate limits
+  return callGeminiWithRetry(async () => {
+    const client = new GoogleGenAI({ apiKey });
 
-  const response = await client.models.generateContent({
-    model: IMAGE_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: imageBase64,
-            },
-          },
-          {
-            text: prompt,
-          },
-        ],
+    const response = await client.models.generateContent({
+      model: IMAGE_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType, data: imageBase64 } },
+            { text: prompt },
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
       },
-    ],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-    },
-  });
+    });
 
-  const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
-    throw new Error("No response from Gemini API");
-  }
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (!parts) throw new Error("No response from Gemini API");
 
-  for (const part of parts) {
-    if (part.inlineData) {
-      return {
-        imageBase64: part.inlineData.data!,
-        mimeType: part.inlineData.mimeType || "image/png",
-      };
+    for (const part of parts) {
+      if (part.inlineData) {
+        return {
+          imageBase64: part.inlineData.data!,
+          mimeType: part.inlineData.mimeType || "image/png",
+        };
+      }
     }
-  }
 
-  // If no image, check if there's text explaining why
-  const textPart = parts.find((p) => p.text);
-  const reason = textPart?.text || "Unknown reason";
-  throw new Error(`Gemini returned no image. Response: ${reason.slice(0, 200)}`);
+    const textPart = parts.find((p) => p.text);
+    throw new Error(`Gemini returned no image: ${textPart?.text?.slice(0, 200) || "Unknown"}`);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -201,44 +221,46 @@ export async function refineImage(
   mimeType: string,
   instruction: string
 ): Promise<{ imageBase64: string; mimeType: string }> {
-  const client = new GoogleGenAI({ apiKey });
-
   const prompt = `Using the provided image, make the following change to this staged room:
 
 ${instruction}
 
 Keep the original layout, walls, windows, flooring, and every architectural detail EXACTLY the same. Only modify the furniture and decor as instructed. Preserve the camera angle, lighting, and physics. Professional real estate listing photography quality. Generate the updated image now.`;
 
-  const response = await client.models.generateContent({
-    model: IMAGE_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { inlineData: { mimeType, data: imageBase64 } },
-          { text: prompt },
-        ],
+  return callGeminiWithRetry(async () => {
+    const client = new GoogleGenAI({ apiKey });
+
+    const response = await client.models.generateContent({
+      model: IMAGE_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType, data: imageBase64 } },
+            { text: prompt },
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
       },
-    ],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-    },
-  });
+    });
 
-  const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) throw new Error("No response from Gemini API");
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (!parts) throw new Error("No response from Gemini API");
 
-  for (const part of parts) {
-    if (part.inlineData) {
-      return {
-        imageBase64: part.inlineData.data!,
-        mimeType: part.inlineData.mimeType || "image/png",
-      };
+    for (const part of parts) {
+      if (part.inlineData) {
+        return {
+          imageBase64: part.inlineData.data!,
+          mimeType: part.inlineData.mimeType || "image/png",
+        };
+      }
     }
-  }
 
-  const textPart = parts.find((p) => p.text);
-  throw new Error(
-    `Gemini returned no image: ${textPart?.text?.slice(0, 200) || "Unknown"}`
-  );
+    const textPart = parts.find((p) => p.text);
+    throw new Error(
+      `Gemini returned no image: ${textPart?.text?.slice(0, 200) || "Unknown"}`
+    );
+  });
 }
