@@ -35,6 +35,7 @@ import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import ExportModal from "@/components/ExportModal";
 import { v4 as uuidv4 } from "uuid";
 import { resizeImageForApi } from "@/lib/resize";
+import { showToast } from "@/components/Toast";
 
 export default function ListingDetailPage({
   params,
@@ -142,6 +143,12 @@ export default function ListingDetailPage({
         if (i < queueItems.length - 1) await new Promise((r) => setTimeout(r, 8000));
       }
       setIsStaging(false);
+      const successCount = queueItems.filter((_, idx) => {
+        const q = document.querySelector(`[data-queue-idx="${idx}"]`);
+        return !q; // fallback
+      }).length;
+      // Count from state
+      showToast(`Staging complete! ${newStagedPhotos.length - (currentListing.stagedPhotos?.length || 0)} photos staged.`, "success");
     },
     []
   );
@@ -288,8 +295,9 @@ export default function ListingDetailPage({
       }
       setRefiningId(null);
       setRefinementInput("");
+      showToast("Image refined successfully!", "success");
     } catch (error) {
-      alert(`Refinement failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      showToast(`Refinement failed: ${error instanceof Error ? error.message : "Unknown error"}`, "error");
     } finally {
       setRefinementLoading(false);
     }

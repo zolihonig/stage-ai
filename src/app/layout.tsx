@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import VersionBadge from "@/components/VersionBadge";
+import ToastContainer from "@/components/Toast";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -50,6 +51,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         {children}
+        <ToastContainer />
         <VersionBadge />
       </body>
     </html>
