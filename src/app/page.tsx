@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Sparkles, Layers, Download, Shield, Clock, Palette } from "lucide-react";
+import LandingBeforeAfter from "@/components/LandingBeforeAfter";
 
 export default function LandingPage() {
   return (
@@ -111,6 +112,24 @@ export default function LandingPage() {
               <p className="text-xs text-slate mt-0.5 tracking-wide uppercase">{stat.label}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Before/After Demo */}
+      <section className="py-16 sm:py-24 bg-white">
+        <div className="max-w-5xl mx-auto px-5 sm:px-8">
+          <div className="text-center mb-10">
+            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-gold mb-3">See It In Action</p>
+            <h2 className="font-serif text-3xl sm:text-4xl text-navy">
+              Before & after
+            </h2>
+            <p className="mt-3 text-slate max-w-md mx-auto text-sm">
+              Drag the slider to see how AI staging transforms an empty room while preserving every detail.
+            </p>
+          </div>
+          <div className="max-w-3xl mx-auto">
+            <LandingBeforeAfter />
+          </div>
         </div>
       </section>
 

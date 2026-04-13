@@ -18,7 +18,24 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "StageAI — AI Virtual Staging for Real Estate",
   description:
-    "Stage entire listings in minutes with AI. Photorealistic virtual staging for real estate agents.",
+    "Stage entire listings in minutes with AI. Photorealistic virtual staging that preserves every architectural detail. 13 designer styles, MLS-compliant exports.",
+  icons: {
+    icon: "/favicon-32.png",
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: "StageAI — AI Virtual Staging for Real Estate",
+    description:
+      "Stage entire listings in minutes. Upload photos, pick a style, get photorealistic staged images instantly.",
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630 }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "StageAI — AI Virtual Staging",
+    description: "Stage entire listings in minutes with AI.",
+    images: ["/og-image.jpg"],
+  },
 };
 
 export default function RootLayout({
