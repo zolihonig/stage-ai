@@ -246,6 +246,20 @@ export default function ListingDetailPage({
     [failedPhotos, restageWithStyle]
   );
 
+  // Re-stage ALL photos with a given style
+  const restageAllWithStyle = useCallback(
+    async (styleName: string) => {
+      if (!listing) return;
+      setStylePickerOpen(null);
+      showToast(`Staging all ${listing.photos.length} photos in ${styleName}...`, "loading");
+      for (const photo of listing.photos) {
+        await restageWithStyle(photo.id, styleName);
+      }
+      showToast(`All photos staged in ${styleName}!`, "success");
+    },
+    [listing, restageWithStyle]
+  );
+
   useEffect(() => {
     const loadAndStage = async () => {
       const data = await getListing(id);
@@ -394,47 +408,72 @@ export default function ListingDetailPage({
               ) : (
                 /* Side-by-side grid */
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2">
-                  {/* Original */}
-                  <div className="rounded-xl overflow-hidden border border-navy/10 shadow-sm">
-                    <div className="aspect-[4/3] relative">
-                      <img src={photo.dataUrl} alt="Original" className="w-full h-full object-cover" />
-                      <div className="absolute top-1.5 left-1.5 bg-navy/70 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">Original</div>
+                  {/* Original — just the image */}
+                  <div>
+                    <div className="rounded-xl overflow-hidden border border-navy/10 shadow-sm">
+                      <div className="aspect-[4/3] relative">
+                        <img src={photo.dataUrl} alt="Original" className="w-full h-full object-cover" />
+                        <div className="absolute top-1.5 left-1.5 bg-navy/70 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">Original</div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Staged / Loading / Failed / Empty */}
-                  {current ? (
-                    <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm relative group">
-                      <div className="aspect-[4/3] relative">
-                        <img src={current.dataUrl} alt={current.style} className="w-full h-full object-cover" />
-                        <div className="absolute top-1.5 left-1.5 bg-gold/90 text-navy text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded backdrop-blur-sm">{current.style}</div>
-                        <button onClick={() => toggleSlider(current.id)} className="absolute top-1.5 right-1.5 bg-navy/70 hover:bg-navy text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm flex items-center gap-1">
-                          <SlidersHorizontal size={10} />Compare
-                        </button>
-                      </div>
-                    </div>
-                  ) : isProcessing || isRetryingThis ? (
-                    <div className="rounded-xl overflow-hidden border border-navy/10 bg-ivory-light">
-                      <div className="aspect-[4/3] flex items-center justify-center">
-                        <div className="text-center"><Loader2 size={20} className="text-gold animate-spin mx-auto mb-1" /><p className="text-[10px] text-slate">{isRetryingThis ? "Retrying..." : "Staging..."}</p></div>
-                      </div>
-                    </div>
-                  ) : isFailed ? (
-                    <div className="rounded-xl overflow-hidden border border-red-200 bg-red-50/50">
-                      <div className="aspect-[4/3] flex items-center justify-center">
-                        <div className="text-center px-3">
-                          <AlertCircle size={20} className="text-red-400 mx-auto mb-1.5" />
-                          <p className="text-[10px] text-red-500 font-medium mb-0.5">Failed</p>
-                          <p className="text-[9px] text-red-400 mb-2 line-clamp-2">{failedPhotos.get(photo.id)?.error}</p>
-                          <button onClick={() => retryPhoto(photo.id)} className="inline-flex items-center gap-1 text-[11px] font-medium bg-gold hover:bg-gold-dark text-white px-3 py-1.5 rounded-lg"><RefreshCw size={11} />Retry</button>
+                  {/* Staged column — image + version nav underneath */}
+                  <div>
+                    {current ? (
+                      <div className="rounded-xl overflow-hidden border border-gold/20 shadow-sm relative group">
+                        <div className="aspect-[4/3] relative">
+                          <img src={current.dataUrl} alt={current.style} className="w-full h-full object-cover" />
+                          <div className="absolute top-1.5 left-1.5 bg-gold/90 text-navy text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded backdrop-blur-sm">{current.style}</div>
+                          <button onClick={() => toggleSlider(current.id)} className="absolute top-1.5 right-1.5 bg-navy/70 hover:bg-navy text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm flex items-center gap-1">
+                            <SlidersHorizontal size={10} />Compare
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl overflow-hidden border border-dashed border-navy/10 bg-ivory-light/50">
-                      <div className="aspect-[4/3] flex items-center justify-center"><p className="text-[10px] text-slate/50">Not staged</p></div>
-                    </div>
-                  )}
+                    ) : isProcessing || isRetryingThis ? (
+                      <div className="rounded-xl overflow-hidden border border-navy/10 bg-ivory-light">
+                        <div className="aspect-[4/3] flex items-center justify-center">
+                          <div className="text-center"><Loader2 size={20} className="text-gold animate-spin mx-auto mb-1" /><p className="text-[10px] text-slate">{isRetryingThis ? "Changing style..." : "Staging..."}</p></div>
+                        </div>
+                      </div>
+                    ) : isFailed ? (
+                      <div className="rounded-xl overflow-hidden border border-red-200 bg-red-50/50">
+                        <div className="aspect-[4/3] flex items-center justify-center">
+                          <div className="text-center px-3">
+                            <AlertCircle size={20} className="text-red-400 mx-auto mb-1.5" />
+                            <p className="text-[10px] text-red-500 font-medium mb-0.5">Failed</p>
+                            <p className="text-[9px] text-red-400 mb-2 line-clamp-2">{failedPhotos.get(photo.id)?.error}</p>
+                            <button onClick={() => retryPhoto(photo.id)} className="inline-flex items-center gap-1 text-[11px] font-medium bg-gold hover:bg-gold-dark text-white px-3 py-1.5 rounded-lg"><RefreshCw size={11} />Retry</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl overflow-hidden border border-dashed border-navy/10 bg-ivory-light/50">
+                        <div className="aspect-[4/3] flex items-center justify-center"><p className="text-[10px] text-slate/50">Not staged</p></div>
+                      </div>
+                    )}
+
+                    {/* Version navigation — under the staged image */}
+                    {allVersions.length > 1 && (
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <button
+                          onClick={() => setActiveVersion((p) => ({ ...p, [photo.id]: Math.max(0, versionIdx - 1) }))}
+                          disabled={versionIdx === 0}
+                          className="p-0.5 rounded text-slate hover:text-navy disabled:opacity-30"
+                        ><ChevronLeft size={13} /></button>
+                        <span className="text-[10px] text-slate font-medium">{versionIdx + 1}/{allVersions.length}</span>
+                        <button
+                          onClick={() => setActiveVersion((p) => ({ ...p, [photo.id]: Math.min(allVersions.length - 1, versionIdx + 1) }))}
+                          disabled={versionIdx === allVersions.length - 1}
+                          className="p-0.5 rounded text-slate hover:text-navy disabled:opacity-30"
+                        ><ChevronRight size={13} /></button>
+                        <button
+                          onClick={() => setHistoryOpen(historyOpen === photo.id ? null : photo.id)}
+                          className="text-[10px] text-slate hover:text-navy flex items-center gap-0.5 ml-auto"
+                        ><History size={10} />All</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -442,26 +481,6 @@ export default function ListingDetailPage({
               {(current || allVersions.length > 0) && (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    {/* Version navigation */}
-                    {allVersions.length > 1 && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setActiveVersion((p) => ({ ...p, [photo.id]: Math.max(0, versionIdx - 1) }))}
-                          disabled={versionIdx === 0}
-                          className="p-1 rounded text-slate hover:text-navy disabled:opacity-30"
-                        ><ChevronLeft size={14} /></button>
-                        <span className="text-[10px] text-slate font-medium">{versionIdx + 1} / {allVersions.length}</span>
-                        <button
-                          onClick={() => setActiveVersion((p) => ({ ...p, [photo.id]: Math.min(allVersions.length - 1, versionIdx + 1) }))}
-                          disabled={versionIdx === allVersions.length - 1}
-                          className="p-1 rounded text-slate hover:text-navy disabled:opacity-30"
-                        ><ChevronRight size={14} /></button>
-                        <button
-                          onClick={() => setHistoryOpen(historyOpen === photo.id ? null : photo.id)}
-                          className="text-[10px] text-slate hover:text-navy flex items-center gap-0.5 ml-1"
-                        ><History size={11} />History</button>
-                      </div>
-                    )}
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5">
@@ -511,16 +530,33 @@ export default function ListingDetailPage({
                       </div>
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
                         {STYLES.map((s) => (
-                          <button
-                            key={s.id}
-                            onClick={() => restageWithStyle(photo.id, s.name)}
-                            className="rounded-lg overflow-hidden border border-navy/10 hover:border-gold transition-colors"
-                          >
-                            <img src={`/styles/${s.id}.png`} alt={s.name} className="w-full aspect-[4/3] object-cover" />
-                            <p className="text-[8px] sm:text-[9px] text-center text-navy py-0.5 truncate px-0.5">{s.name}</p>
-                          </button>
+                          <div key={s.id} className="flex flex-col">
+                            <button
+                              onClick={() => restageWithStyle(photo.id, s.name)}
+                              className="rounded-lg overflow-hidden border border-navy/10 hover:border-gold transition-colors"
+                            >
+                              <img src={`/styles/${s.id}.png`} alt={s.name} className="w-full aspect-[4/3] object-cover" />
+                              <p className="text-[8px] sm:text-[9px] text-center text-navy py-0.5 truncate px-0.5">{s.name}</p>
+                            </button>
+                          </div>
                         ))}
                       </div>
+                      {listing.photos.length > 1 && (
+                        <div className="mt-2 pt-2 border-t border-navy/5">
+                          <p className="text-[10px] text-slate mb-1.5">Or apply a style to all {listing.photos.length} photos:</p>
+                          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                            {STYLES.slice(0, 6).map((s) => (
+                              <button
+                                key={s.id}
+                                onClick={() => restageAllWithStyle(s.name)}
+                                className="text-[10px] px-2.5 py-1 rounded-full border border-navy/10 bg-white text-navy hover:border-gold hover:text-gold transition-colors whitespace-nowrap shrink-0"
+                              >
+                                {s.name} for all
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
