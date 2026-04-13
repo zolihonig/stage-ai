@@ -12,6 +12,8 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Grid3X3,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { getListing, saveListing, getApiKey } from "@/lib/store";
 import type { Listing, StagedPhoto } from "@/lib/store";
@@ -26,6 +28,7 @@ import StagingQueue, { type QueueItem } from "@/components/StagingQueue";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import ExportModal from "@/components/ExportModal";
 import { v4 as uuidv4 } from "uuid";
+import { resizeImageForApi } from "@/lib/resize";
 
 export default function ListingDetailPage({
   params,
@@ -47,6 +50,9 @@ export default function ListingDetailPage({
   const [refinementLoading, setRefinementLoading] = useState(false);
   // Track which images are in slider mode vs static
   const [sliderMode, setSliderMode] = useState<Set<string>>(new Set());
+  // Track failed photos for retry
+  const [failedPhotos, setFailedPhotos] = useState<Map<string, { style: string; error: string }>>(new Map());
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
   const toggleSlider = (id: string) => {
     setSliderMode((prev) => {
@@ -103,8 +109,8 @@ export default function ListingDetailPage({
         );
 
         try {
-          const base64 = photo.dataUrl.split(",")[1];
-          const mimeType = photo.dataUrl.split(";")[0].split(":")[1] || "image/jpeg";
+          // Resize to max 2048px and normalize to JPEG to avoid payload limits
+          const { base64, mimeType } = await resizeImageForApi(photo.dataUrl);
           const roomTypeName =
             ROOM_TYPES.find((r) => r.id === photo.roomType)?.name || photo.roomType;
 
@@ -149,9 +155,15 @@ export default function ListingDetailPage({
           setListing({ ...updatedListing });
         } catch (error) {
           console.error("Staging failed:", error);
+          const errMsg = error instanceof Error ? error.message : "Unknown error";
           setQueue((prev) =>
             prev.map((q, idx) => (idx === i ? { ...q, status: "failed" } : q))
           );
+          setFailedPhotos((prev) => {
+            const next = new Map(prev);
+            next.set(item.photoId, { style: item.style, error: errMsg });
+            return next;
+          });
         }
 
         if (i < queueItems.length - 1) {
@@ -162,6 +174,66 @@ export default function ListingDetailPage({
       setIsStaging(false);
     },
     []
+  );
+
+  const retryPhoto = useCallback(
+    async (photoId: string) => {
+      if (!listing) return;
+      const apiKey = getApiKey();
+      if (!apiKey) { alert("Add your Gemini API key in Settings."); return; }
+
+      const photo = listing.photos.find((p) => p.id === photoId);
+      if (!photo) return;
+
+      const failInfo = failedPhotos.get(photoId);
+      const style = failInfo?.style || searchParams.get("styles")?.split(",")[0] || "Modern Minimalist";
+      const colorPref = searchParams.get("color") as ColorPreferenceId | null;
+      const colorName = colorPref ? COLOR_PREFERENCES.find((c) => c.id === colorPref)?.description || "" : "";
+
+      setRetrying((prev) => new Set(prev).add(photoId));
+      setFailedPhotos((prev) => { const next = new Map(prev); next.delete(photoId); return next; });
+
+      try {
+        const { base64, mimeType } = await resizeImageForApi(photo.dataUrl);
+        const roomTypeName = ROOM_TYPES.find((r) => r.id === photo.roomType)?.name || photo.roomType;
+
+        const startTime = Date.now();
+        const res = await fetch("/api/stage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mimeType, style, roomType: roomTypeName, colorPreference: colorName, apiKey }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `API error: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const updatedListing = {
+          ...listing,
+          stagedPhotos: [
+            ...listing.stagedPhotos,
+            {
+              id: uuidv4(),
+              photoId,
+              style,
+              dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
+              generationTimeMs: Date.now() - startTime,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        };
+        await saveListing(updatedListing);
+        setListing(updatedListing);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Unknown error";
+        setFailedPhotos((prev) => { const next = new Map(prev); next.set(photoId, { style, error: errMsg }); return next; });
+      } finally {
+        setRetrying((prev) => { const next = new Set(prev); next.delete(photoId); return next; });
+      }
+    },
+    [listing, failedPhotos, searchParams]
   );
 
   useEffect(() => {
@@ -365,6 +437,34 @@ export default function ListingDetailPage({
                       <div className="text-center">
                         <Loader2 size={20} className="text-gold animate-spin mx-auto mb-1" />
                         <p className="text-[10px] text-slate">Staging...</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : failedPhotos.has(photo.id) ? (
+                  <div className="rounded-xl overflow-hidden border border-red-200 bg-red-50/50">
+                    <div className="aspect-[4/3] flex items-center justify-center">
+                      <div className="text-center px-3">
+                        <AlertCircle size={20} className="text-red-400 mx-auto mb-1.5" />
+                        <p className="text-[10px] text-red-500 font-medium mb-0.5">Staging failed</p>
+                        <p className="text-[9px] text-red-400 mb-2 line-clamp-2">
+                          {failedPhotos.get(photo.id)?.error}
+                        </p>
+                        <button
+                          onClick={() => retryPhoto(photo.id)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium bg-gold hover:bg-gold-dark text-white px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <RefreshCw size={11} />
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : retrying.has(photo.id) ? (
+                  <div className="rounded-xl overflow-hidden border border-navy/10 bg-ivory-light">
+                    <div className="aspect-[4/3] flex items-center justify-center">
+                      <div className="text-center">
+                        <Loader2 size={20} className="text-gold animate-spin mx-auto mb-1" />
+                        <p className="text-[10px] text-slate">Retrying...</p>
                       </div>
                     </div>
                   </div>
