@@ -2,8 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildDesignAnalysisPrompt } from "./interior-design-prompt";
 
-// Image generation model
-const IMAGE_MODEL = "gemini-2.5-flash-image";
+// Image generation model — Flash 3.1 has best quality + fewer structural hallucinations
+const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 // Claude model for image analysis + prompt crafting
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
