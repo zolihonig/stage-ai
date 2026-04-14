@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
+import CloudImport from "@/components/CloudImport";
 import { type Photo, saveListing } from "@/lib/store";
 import type { StyleId, ColorPreferenceId } from "@/lib/constants";
 import { v4 as uuidv4 } from "uuid";
@@ -85,6 +86,22 @@ export default function NewListingPage() {
           </div>
 
           <PhotoUploader photos={photos} onPhotosChange={setPhotos} />
+
+          {/* Cloud import */}
+          <CloudImport
+            onImport={(imported) => {
+              const newPhotos = imported.map((img) => ({
+                id: uuidv4(),
+                file: null,
+                dataUrl: img.dataUrl,
+                roomType: "living_room" as const,
+                fileName: img.fileName,
+                width: 0,
+                height: 0,
+              }));
+              setPhotos((prev) => [...prev, ...newPhotos]);
+            }}
+          />
 
           {/* Optional listing details — collapsed by default */}
           <button
