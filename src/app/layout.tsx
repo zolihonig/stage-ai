@@ -3,6 +3,8 @@ import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import VersionBadge from "@/components/VersionBadge";
 import ToastContainer from "@/components/Toast";
+import { AuthProvider } from "@/components/AuthProvider";
+import { createClient } from "@/lib/supabase/server";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -26,8 +28,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "StageAI — AI Virtual Staging for Real Estate",
-    description:
-      "Stage entire listings in minutes. Upload photos, pick a style, get photorealistic staged images instantly.",
+    description: "Stage entire listings in minutes. Upload photos, pick a style, get photorealistic staged images instantly.",
     images: [{ url: "/og-image.jpg", width: 1200, height: 630 }],
     type: "website",
   },
@@ -39,18 +40,30 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Get initial user server-side for AuthProvider
+  let initialUser = null;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    initialUser = user;
+  } catch {
+    // No auth on first load is fine
+  }
+
   return (
     <html
       lang="en"
       className={`${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        {children}
+        <AuthProvider initialUser={initialUser}>
+          {children}
+        </AuthProvider>
         <ToastContainer />
         <VersionBadge />
       </body>
