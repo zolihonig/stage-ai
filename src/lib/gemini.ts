@@ -200,11 +200,24 @@ export async function refineImage(
   mimeType: string,
   instruction: string
 ): Promise<{ imageBase64: string; mimeType: string }> {
-  const prompt = `Using the provided image, make the following change to this staged room:
+  const prompt = `Using the provided image, make ONLY the following change to this staged room:
 
 ${instruction}
 
-Keep the original layout, walls, windows, flooring, and every architectural detail EXACTLY the same. Only modify the furniture and decor as instructed. Preserve the camera angle, lighting, and physics. Professional real estate listing photography quality. Generate the updated image now.`;
+ABSOLUTE RULES — VIOLATION OF ANY OF THESE MAKES THE IMAGE UNUSABLE:
+1. Do NOT add, remove, move, or modify any walls, doors, door frames, windows, window frames, ceilings, floors, light fixtures, ceiling fans, built-in shelving, closets, columns, archways, molding, baseboards, outlets, vents, or ANY structural/architectural element
+2. Do NOT change wall colors, floor materials, ceiling texture, or any surface finish
+3. Do NOT change the camera angle, perspective, field of view, or image dimensions
+4. Do NOT change the lighting direction, color temperature, or ambient light levels
+5. ONLY add, remove, rearrange, or modify FURNITURE and DECOR items (sofas, chairs, tables, rugs, art, pillows, plants, lamps, books, vases)
+
+When rearranging furniture:
+- Keep chairs at least 12 inches from walls for realistic spacing
+- Ensure all furniture sits naturally on the floor with proper contact shadows
+- Maintain at least 36 inches clearance from all doorways and openings
+- Furniture should look lived-in and natural, not pushed against walls
+
+Professional real estate listing photography quality. Photorealistic result. Generate the updated image now.`;
 
   return callGeminiWithRetry(async () => {
     const client = new GoogleGenAI({ apiKey });

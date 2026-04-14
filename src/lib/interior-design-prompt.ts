@@ -58,12 +58,20 @@ Based on the room analysis, plan EXACTLY which pieces go where:
 - Ensure traffic flow: draw the walking path from entry to each zone
 
 STEP 3 — WRITE THE GEMINI PROMPT:
-Now write the prompt for Gemini image generation. The prompt must:
-- Start with "Using the provided image of this ${roomType}..."
-- Describe EVERY piece with material, color, and EXACT position relative to room features
-- Explicitly state which doorways/openings to keep clear
-- Match shadows and lighting to the existing photo
-- End with: "Professional real estate listing photography, shot on medium-format camera with natural grain and subtle depth of field. Hyper-realistic, market-ready."
+Now write the prompt for Gemini image generation. The prompt MUST include ALL of these elements:
+
+A) Start with "Using the provided image of this ${roomType}..."
+
+B) Include this EXACT paragraph (copy it word for word):
+"CRITICAL: Do NOT add, remove, move, or alter any walls, doors, door frames, windows, window frames, ceilings, floors, light fixtures, ceiling fans, built-in shelving, closets, columns, archways, molding, baseboards, outlets, vents, or ANY structural or architectural element. Do NOT change wall colors, floor materials, ceiling texture, or any surface finish. Do NOT change the camera angle, perspective, or lighting. ONLY add furniture and decor items."
+
+C) Describe EVERY furniture piece with material, color, dimensions, and EXACT position relative to room features (e.g., "place an 84-inch cream linen sofa centered on the far wall, 12 inches from the wall")
+
+D) Keep chairs and sofas at least 12 inches from walls — furniture should never look pushed flat against a wall
+
+E) Explicitly state which doorways/openings to keep completely clear and unblocked
+
+F) End with: "All added items must have realistic contact shadows matching the existing lighting. Professional real estate listing photography, shot on medium-format camera with natural grain and subtle depth of field. Hyper-realistic, market-ready, photorealistic."
 
 OUTPUT FORMAT: Return ONLY the Gemini prompt. No analysis text, no headers, no explanation. Just the prompt.`;
 }

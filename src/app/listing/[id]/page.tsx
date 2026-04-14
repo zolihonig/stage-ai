@@ -283,9 +283,10 @@ export default function ListingDetailPage({
 
   const handleRefine = async (stagedPhoto: StagedPhoto, instruction: string) => {
     setRefinementLoading(true);
+    showToast("Refining image...", "loading");
     try {
-      const base64 = stagedPhoto.dataUrl.split(",")[1];
-      const mimeType = stagedPhoto.dataUrl.split(";")[0].split(":")[1];
+      // Resize staged image before sending to avoid payload limits
+      const { base64, mimeType } = await resizeImageForApi(stagedPhoto.dataUrl);
       const res = await fetch("/api/refine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
