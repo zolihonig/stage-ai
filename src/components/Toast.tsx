@@ -12,8 +12,11 @@ interface Toast {
 }
 
 let addToastFn: ((message: string, type: ToastType) => void) | null = null;
+let clearLoadingFn: (() => void) | null = null;
 
 export function showToast(message: string, type: ToastType = "success") {
+  // Auto-clear loading toasts when showing a success or error
+  if (type !== "loading") clearLoadingFn?.();
   addToastFn?.(message, type);
 }
 
@@ -30,7 +33,10 @@ export default function ToastContainer() {
         }, 4000);
       }
     };
-    return () => { addToastFn = null; };
+    clearLoadingFn = () => {
+      setToasts((prev) => prev.filter((t) => t.type !== "loading"));
+    };
+    return () => { addToastFn = null; clearLoadingFn = null; };
   }, []);
 
   const dismiss = (id: string) => {
