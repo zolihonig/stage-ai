@@ -6,6 +6,7 @@ import { ArrowRight, ArrowLeft, Loader2, ChevronDown, ChevronUp } from "lucide-r
 import PhotoUploader from "@/components/PhotoUploader";
 import StyleSelector from "@/components/StyleSelector";
 import CloudImport from "@/components/CloudImport";
+import RealtyImport from "@/components/RealtyImport";
 import { type Photo, saveListing } from "@/lib/store";
 import type { StyleId, ColorPreferenceId } from "@/lib/constants";
 import { v4 as uuidv4 } from "uuid";
@@ -100,6 +101,27 @@ export default function NewListingPage() {
                 height: 0,
               }));
               setPhotos((prev) => [...prev, ...newPhotos]);
+            }}
+          />
+
+          {/* MLS import via RealtyAPI */}
+          <RealtyImport
+            onImport={(imported, importedAddress) => {
+              const newPhotos = imported.map((img) => ({
+                id: uuidv4(),
+                file: null,
+                dataUrl: img.dataUrl,
+                roomType: "living_room" as const,
+                fileName: img.fileName,
+                width: 0,
+                height: 0,
+              }));
+              setPhotos((prev) => [...prev, ...newPhotos]);
+              if (importedAddress && !address) {
+                setAddress(importedAddress);
+                if (!name) setName(importedAddress);
+                setShowDetails(true);
+              }
             }}
           />
 

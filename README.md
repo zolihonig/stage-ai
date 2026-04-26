@@ -18,6 +18,16 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Environment
+
+Copy `.env.local.example` to `.env.local` and fill in the values. RealtyAPI
+integration (MLS photo import on the New Listing page) requires:
+
+- `REALTYAPI_KEY` — server-side key from https://www.realtyapi.io/dashboard.
+- Optional `REALTYAPI_BASE_URL`, `REALTYAPI_SEARCH_PATH`, `REALTYAPI_LISTING_PATH`
+  to override the default endpoint paths if RealtyAPI's schema differs from
+  the assumed REST shape (see `src/lib/realtyapi.ts`).
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
