@@ -43,7 +43,7 @@ export default function CloudImport({ onImport }: CloudImportProps) {
         throw new Error(err.error || "Failed to import");
       }
 
-      const data = await res.json();
+      const data: { files: { name: string; fileId?: string; path?: string }[] } = await res.json();
       const photos: { dataUrl: string; fileName: string }[] = [];
 
       setStatus(`Downloading ${data.files.length} photos...`);
@@ -56,7 +56,9 @@ export default function CloudImport({ onImport }: CloudImportProps) {
           const imgRes = await fetch("/api/import-link", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ downloadUrl: file.downloadUrl, service }),
+            // The server builds the real download URL from the file id (Drive)
+            // or the shared link + path (Dropbox). No API key reaches the browser.
+            body: JSON.stringify({ download: true, service, fileId: file.fileId, url, path: file.path }),
           });
 
           if (imgRes.ok) {
